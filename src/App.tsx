@@ -1158,8 +1158,9 @@ function Contributions({ s, summary, pay }: any) {
         <div>
           <h2>Compte commun · {s.budget.label}</h2>
           <p>
-            Chaque versement réduit la contribution mensuelle restante du membre
-            concerné.
+            Les contributions viennent du budget prévisionnel. Le reste personnel
+            indique ce que chacun conserve sur son revenu après avoir financé sa
+            part du mois.
           </p>
         </div>
       </div>
@@ -1173,6 +1174,18 @@ function Contributions({ s, summary, pay }: any) {
               <div className="metric">
                 <span>Contribution attendue</span>
                 <b>{euro(summary.expected[m.id])}</b>
+              </div>
+              <div className="metric personal-remainder">
+                <span>Reste personnel après contribution</span>
+                <b
+                  className={
+                    m.incomeCents - summary.expected[m.id] < 0
+                      ? "orange"
+                      : "green"
+                  }
+                >
+                  {euro(m.incomeCents - summary.expected[m.id])}
+                </b>
               </div>
               <div className="metric">
                 <span>Déjà versé</span>
@@ -1219,6 +1232,7 @@ function Contributions({ s, summary, pay }: any) {
   );
 }
 function AllocationBreakdown({ s }: { s: AppState }) {
+  const summary = budgetSummary(s.budget, s.members);
   return (
     <section className="panel page-panel allocation-breakdown">
       <div className="section-head">
@@ -1227,12 +1241,13 @@ function AllocationBreakdown({ s }: { s: AppState }) {
           <p>Détail des contributions prévues pour chaque enveloppe.</p>
         </div>
       </div>
-      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => (
-        <div className="allocation-group" key={group}>
+      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => {
+        const lines = s.budget.lines.filter(
+          (line) => (line.expenseGroup ?? "DAILY_LIFE") === group,
+        );
+        return <div className="allocation-group" key={group}>
           <h3>{group === "HOUSING" ? "Appartement" : "Vie quotidienne"}</h3>
-          {s.budget.lines
-            .filter((l) => (l.expenseGroup ?? "DAILY_LIFE") === group)
-            .map((l) => (
+          {lines.map((l) => (
               <div className="allocation-row" key={l.id}>
                 <div className="allocation-name">
                   <b>{l.name}</b>
@@ -1268,8 +1283,46 @@ function AllocationBreakdown({ s }: { s: AppState }) {
                 </div>
               </div>
             ))}
+          <div className="allocation-subtotal">
+            <span>Total {group === "HOUSING" ? "Appartement" : "Vie quotidienne"}</span>
+            {s.members.map((member) => (
+              <div key={member.id}>
+                <small>{member.name} doit financer</small>
+                <b>
+                  {euro(
+                    lines.reduce(
+                      (total, line) =>
+                        total +
+                        (line.shares.find(
+                          (share) => share.memberId === member.id,
+                        )?.amountCents ?? 0),
+                      0,
+                    ),
+                  )}
+                </b>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
+      })}
+      <div className="monthly-contribution-summary">
+        <h3>Total du mois</h3>
+        {s.members.map((member) => {
+          const expected = summary.expected[member.id],
+            paid = summary.paid[member.id],
+            remaining = Math.max(0, expected - paid),
+            personalRemainder = member.incomeCents - expected;
+          return (
+            <div key={member.id}>
+              <span className={`mini-face ${member.id}`}>{member.name[0]}</span>
+              <p><b>{member.name}</b><small>Attendu {euro(expected)}</small></p>
+              <span><small>Déjà versé</small><b className="green">{euro(paid)}</b></span>
+              <span><small>Reste</small><b className={remaining ? "orange" : "green"}>{remaining ? euro(remaining) : "À jour ✓"}</b></span>
+              <span><small>Après contribution</small><b className={personalRemainder < 0 ? "orange" : "green"}>{euro(personalRemainder)}</b></span>
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

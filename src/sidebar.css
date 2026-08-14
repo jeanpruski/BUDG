@@ -87,6 +87,117 @@
   }
 }
 
+.allocation-subtotal {
+  display: grid;
+  grid-template-columns: 1fr repeat(2, minmax(120px, 0.75fr));
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #eef6f1;
+}
+
+.allocation-subtotal > span {
+  color: #2e5a4e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.allocation-subtotal div {
+  text-align: right;
+}
+
+.allocation-subtotal small,
+.allocation-subtotal b {
+  display: block;
+}
+
+.allocation-subtotal small {
+  color: #76817b;
+  font-size: 8px;
+}
+
+.allocation-subtotal b {
+  margin-top: 3px;
+  color: #2e5a4e;
+  font-size: 12px;
+}
+
+.monthly-contribution-summary {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 2px solid #e4eae5;
+}
+
+.monthly-contribution-summary > h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.monthly-contribution-summary > div {
+  display: grid;
+  grid-template-columns: 32px 1fr repeat(3, 120px);
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid #eceeea;
+}
+
+.monthly-contribution-summary p {
+  margin: 0;
+}
+
+.monthly-contribution-summary b,
+.monthly-contribution-summary small {
+  display: block;
+}
+
+.monthly-contribution-summary p b {
+  font-size: 11px;
+}
+
+.monthly-contribution-summary small {
+  color: #7b8580;
+  font-size: 8px;
+}
+
+.monthly-contribution-summary span > b {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .allocation-subtotal {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .allocation-subtotal > span {
+    grid-column: 1 / -1;
+  }
+
+  .allocation-subtotal div {
+    text-align: left;
+  }
+
+  .monthly-contribution-summary > div {
+    grid-template-columns: 32px 1fr 1fr;
+  }
+
+  .monthly-contribution-summary > div > span:nth-last-child(-n + 2) {
+    grid-column: 2 / -1;
+  }
+}
+
+.personal-remainder {
+  margin: 4px -10px 0;
+  padding: 12px 10px;
+  border-radius: 8px;
+  background: #f1f7f3;
+}
+
 .app-shell > aside .collapse-button:hover {
   background: #ffffff12;
 }
