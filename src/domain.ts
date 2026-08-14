@@ -1,10 +1,11 @@
 export type AllocationType = "PRO_RATA" | "FIFTY_FIFTY" | "CUSTOM" | "PERSONAL";
+export type ExpenseGroup = "HOUSING" | "DAILY_LIFE";
 export type BudgetStatus = "DRAFT" | "ACTIVE" | "CLOSED";
 export type Member = { id: string; name: string; incomeCents: number };
 export type Share = { memberId: string; amountCents: number };
-export type BudgetLine = { id: string; name: string; plannedCents: number; allocationType: AllocationType; shares: Share[] };
+export type BudgetLine = { id: string; name: string; plannedCents: number; allocationType: AllocationType; expenseGroup?: ExpenseGroup; shares: Share[] };
 export type Expense = { id: string; lineId: string; amountCents: number; date: string; description: string };
-export type Payment = { id: string; memberId: string; amountCents: number; date: string };
+export type Payment = { id: string; memberId: string; amountCents: number; date: string; note?: string };
 export type Project = { id: string; name: string; targetCents?: number; allocatedCents: number };
 export type Budget = { id: string; label: string; status: BudgetStatus; lines: BudgetLine[]; expenses: Expense[]; payments: Payment[]; closedSurplusCents?: number };
 
