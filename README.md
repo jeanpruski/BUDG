@@ -1,8 +1,12 @@
-# BUDG
+<p align="center">
+  <img src="public/assets/budg-logo.png" alt="Logo BUDG" width="180" />
+</p>
+
+<h1 align="center">BUDG</h1>
+
+<p align="center"><strong>Votre budget. Votre projet. Votre avenir.</strong></p>
 
 Application locale de budget commun : contributions, enveloppes, dépenses et Surplus.
-
-> Votre budget. Votre projet. Votre avenir.
 
 ![Direction artistique et interface de BUDG](public/assets/budg-direction-artistique.png)
 

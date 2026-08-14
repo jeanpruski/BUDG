@@ -1,0 +1,151 @@
+.app-shell > aside .collapse-button {
+  position: absolute;
+  top: auto;
+  left: auto;
+  right: 12px;
+  bottom: 24px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
+
+.budget-admin > div > span b,
+.budget-admin > div > span small {
+  display: block;
+}
+
+.budget-admin > div > span small {
+  margin-top: 3px;
+  color: #7c8580;
+  font-size: 9px;
+}
+
+.budget-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.budget-admin-actions button:first-child {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #e8f4ee;
+  color: #2e5a4e;
+}
+
+.budget-admin-actions button:disabled,
+.budget-explanation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.funding-breakdown {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #f4f8f5;
+  color: #52655c;
+  font-size: 9px;
+}
+
+.funding-breakdown span {
+  margin-right: auto;
+  color: #7a857f;
+}
+
+.funding-breakdown b {
+  color: #2e5a4e;
+  white-space: nowrap;
+}
+
+.expense-transaction {
+  flex-wrap: wrap;
+}
+
+.expense-transaction > .funding-breakdown,
+.history-line > .funding-breakdown {
+  flex: 0 0 100%;
+}
+
+.history-line {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .funding-breakdown {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .funding-breakdown span {
+    margin-right: 0;
+  }
+}
+
+.app-shell > aside .collapse-button:hover {
+  background: #ffffff12;
+}
+
+.household > svg {
+  display: none;
+}
+
+.sidebar-collapsed .collapse-button {
+  top: auto;
+  left: auto;
+  right: 23px;
+  bottom: 24px;
+}
+
+.sidebar-collapsed .household {
+  padding-bottom: 55px;
+}
+
+.sidebar-collapsed .household > span {
+  margin-top: -30px;
+}
+
+@media (max-width: 720px) {
+  .app-shell > aside .collapse-button {
+    display: none;
+  }
+
+  .sidebar-collapsed .household {
+    padding-bottom: 18px;
+  }
+
+  .sidebar-collapsed .household > span {
+    margin-top: 0;
+  }
+
+  .mobile-nav .mobile-add {
+    position: relative;
+    display: flex;
+    flex: 0 0 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .mobile-nav .mobile-add > svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    margin: 0;
+  }
+
+  .mobile-nav .mobile-add > span {
+    position: absolute;
+    top: 53px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+}
