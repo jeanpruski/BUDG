@@ -1,1677 +1,1074 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { EnvelopeSuggestions } from "./suggestions";
+import { BudgetGuide, EnvelopeCoach } from "./guide";
+import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
 import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
+  HouseholdForm,
+  MonthlyIncomeForm,
+  LineForm,
+  ExpenseForm,
+  PaymentForm,
+} from "./forms";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  LockKeyhole,
+  Sparkles,
+  CheckCircle2,
   Download,
-  History,
+  History as HistoryIcon,
   Home,
-  Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Receipt,
   Settings,
-  Sparkles,
-  Target,
-  Trash2,
-  Upload,
   Users,
   WalletCards,
-  X,
 } from "lucide-react";
-import { budgetSummary, cents, closeBudget, euro, sharesFor, splitAmount } from "./domain";
-import { AppState, loadState, resetState, saveState } from "./store";
+import {
+  AppState,
+  BudgetLine,
+  Expense,
+  Payment,
+  PotExpense,
+  potSummary,
+  budgetSummary,
+  euro,
+  monthLabel,
+  parseMoney,
+  today,
+  validateState,
+} from "./domain";
+import {
+  closeMonth,
+  configureHousehold,
+  initialState,
+  savePotExpense,
+  removePotExpense,
+  removeExpense,
+  removeLine,
+  removePayment,
+  resetState,
+  resetEverything,
+  saveExpense,
+  saveLine,
+  savePayment,
+  setSettled,
+  confirmMonthlyIncomes,
+  uid,
+} from "./store";
+import { Backup, exportBackup, repository, storageLabel } from "./repository";
+import {
+  Actions,
+  Dashboard,
+  Envelopes,
+  History,
+  Members,
+  CommonPot,
+  Transactions,
+} from "./screens";
+import { Field, Form, Metric, Modal } from "./ui";
+
 type View =
   | "dashboard"
   | "budget"
   | "expenses"
-  | "contributions"
-  | "surplus"
-  | "projects"
+  | "payments"
+  | "pot"
   | "history"
   | "settings";
-const navigation: [View, string, typeof Home][] = [
-  ["dashboard", "Tableau de bord", Home],
-  ["budget", "Budget", WalletCards],
-  ["expenses", "Dépenses", Receipt],
-  ["contributions", "Contributions", Users],
-  ["surplus", "Surplus", CircleDollarSign],
-  ["projects", "Projets", Target],
-  ["history", "Historique", History],
-  ["settings", "Paramètres", Settings],
-];
-const iso = () => new Date().toISOString().slice(0, 10);
-export default function App() {
-  const [state, setState] = useState<AppState>(loadState),
-    [view, setView] = useState<View>("dashboard"),
-    [modal, setModal] = useState<
-      | "expense"
-      | "payment"
-      | "project"
-      | "income"
-      | "month"
-      | "budgetLine"
-      | null
-    >(null),
-    [member, setMember] = useState<string | null>(null),
-    [selectedProject, setSelectedProject] = useState<string | null>(null),
-    [menu, setMenu] = useState(false),
-    [collapsed, setCollapsed] = useState(
-      () => localStorage.getItem("budg-sidebar-collapsed") === "true",
-    );
-  const summary = useMemo(
-    () => budgetSummary(state.budget, state.members),
-    [state],
-  );
-  useEffect(() => saveState(state), [state]);
-  const update = (f: (s: AppState) => AppState) => setState((s) => f(s));
-  const go = (v: View) => {
-    setView(v);
-    setMenu(false);
-  };
-  function expense(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget),
-      n = Number(String(d.get("amount")).replace(",", "."));
-    if (n <= 0) return;
-    update((s) => ({
-      ...s,
-      budget: {
-        ...s.budget,
-        expenses: [
-          ...s.budget.expenses,
-          {
-            id: crypto.randomUUID(),
-            lineId: String(d.get("line")),
-            amountCents: cents(n),
-            date: String(d.get("date")),
-            description: String(d.get("description")),
-          },
-        ],
-      },
-    }));
-    setModal(null);
-  }
-  function payment(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget),
-      n = Number(String(d.get("amount")).replace(",", "."));
-    if (!member || n <= 0) return;
-    update((s) => ({
-      ...s,
-      budget: {
-        ...s.budget,
-        payments: [
-          ...s.budget.payments,
-          {
-            id: crypto.randomUUID(),
-            memberId: member,
-            amountCents: cents(n),
-            date: String(d.get("date")),
-            note: String(d.get("note") || ""),
-          },
-        ],
-      },
-    }));
-    setModal(null);
-  }
-  function project(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget),
-      target = Number(d.get("target")),
-      name = String(d.get("name"));
-    update((s) => ({
-      ...s,
-      projects: selectedProject
-        ? s.projects.map((p) =>
-            p.id === selectedProject
-              ? { ...p, name, targetCents: target ? cents(target) : undefined }
-              : p,
-          )
-        : [
-            ...s.projects,
-            {
-              id: crypto.randomUUID(),
-              name,
-              targetCents: target ? cents(target) : undefined,
-              allocatedCents: 0,
-            },
-          ],
-    }));
-    setSelectedProject(null);
-    setModal(null);
-  }
-  function budgetLine(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget),
-      amount = cents(Number(String(d.get("amount")).replace(",", "."))),
-      allocationType = String(d.get("allocationType")) as
-        "PRO_RATA" | "FIFTY_FIFTY",
-      expenseGroup = String(d.get("expenseGroup")) as "HOUSING" | "DAILY_LIFE";
-    if (amount <= 0) return;
-    update((s) => ({
-      ...s,
-      budget: {
-        ...s.budget,
-        lines: [
-          ...s.budget.lines,
-          {
-            id: crypto.randomUUID(),
-            name: String(d.get("name")),
-            plannedCents: amount,
-            allocationType,
-            expenseGroup,
-            shares: sharesFor(amount, allocationType, s.members),
-          },
-        ],
-      },
-    }));
-    setModal(null);
-  }
-  function removeBudgetLine(id: string) {
-    update((s) =>
-      s.budget.status === "CLOSED"
-        ? s
-        : {
-            ...s,
-            budget: {
-              ...s.budget,
-              lines: s.budget.lines.filter((l) => l.id !== id),
-              expenses: s.budget.expenses.filter((e) => e.lineId !== id),
-            },
-          },
-    );
-  }
-  function allocateProject(id: string) {
-    const raw = prompt("Montant à affecter depuis le Surplus (€)");
-    if (raw === null) return;
-    const amount = cents(Number(raw.replace(",", ".")));
-    if (amount <= 0 || amount > state.surplusCents) {
-      alert("Montant invalide ou supérieur au Surplus disponible.");
-      return;
-    }
-    update((s) => ({
-      ...s,
-      surplusCents: s.surplusCents - amount,
-      projects: s.projects.map((p) =>
-        p.id === id ? { ...p, allocatedCents: p.allocatedCents + amount } : p,
-      ),
-      surplusEntries: [
-        {
-          id: crypto.randomUUID(),
-          amountCents: -amount,
-          label: `Affectation ${s.projects.find((p) => p.id === id)?.name}`,
-          date: s.budget.label,
-          type: "allocation",
-        },
-        ...s.surplusEntries,
-      ],
-    }));
-  }
-  function quickAddBudgetLine() {
-    if (state.budget.status === "CLOSED") return;
-    const name = prompt("Nom de l’enveloppe");
-    if (!name) return;
-    const raw = prompt("Montant prévu (€)");
-    if (!raw) return;
-    const amount = cents(Number(raw.replace(",", ".")));
-    if (amount <= 0) return;
-    const housing = confirm(
-      "Cette enveloppe concerne-t-elle l’appartement ?\nOK = Appartement · Annuler = Vie quotidienne",
-    );
-    const prorata = confirm(
-      "Répartition au prorata des revenus ?\nOK = Prorata · Annuler = 50/50",
-    );
-    update((s) => ({
-      ...s,
-      budget: {
-        ...s.budget,
-        lines: [
-          ...s.budget.lines,
-          {
-            id: crypto.randomUUID(),
-            name,
-            plannedCents: amount,
-            allocationType: prorata ? "PRO_RATA" : "FIFTY_FIFTY",
-            expenseGroup: housing ? "HOUSING" : "DAILY_LIFE",
-            shares: sharesFor(
-              amount,
-              prorata ? "PRO_RATA" : "FIFTY_FIFTY",
-              s.members,
-            ),
-          },
-        ],
-      },
-    }));
-  }
-  function editBudgetLine(id: string) {
-    const current = state.budget.lines.find((line) => line.id === id);
-    if (!current || state.budget.status === "CLOSED") return;
-    const name = prompt("Nom de l’enveloppe", current.name);
-    if (!name) return;
-    const raw = prompt(
-      "Montant prévu (€)",
-      String(current.plannedCents / 100),
-    );
-    if (raw === null) return;
-    const amount = cents(Number(raw.replace(",", ".")));
-    if (amount <= 0) return;
-    const housing = confirm(
-      "Cette enveloppe concerne-t-elle l’appartement ?\nOK = Appartement · Annuler = Vie quotidienne",
-    );
-    const prorata = confirm(
-      "Répartition au prorata des revenus ?\nOK = Prorata · Annuler = 50/50",
-    );
-    update((s) => ({
-      ...s,
-      budget: {
-        ...s.budget,
-        lines: s.budget.lines.map((line) =>
-          line.id === id
-            ? {
-                ...line,
-                name,
-                plannedCents: amount,
-                expenseGroup: housing ? "HOUSING" : "DAILY_LIFE",
-                allocationType: prorata ? "PRO_RATA" : "FIFTY_FIFTY",
-                shares: sharesFor(
-                  amount,
-                  prorata ? "PRO_RATA" : "FIFTY_FIFTY",
-                  s.members,
-                ),
-              }
-            : line,
-        ),
-      },
-    }));
-  }
-  function editProject(id: string) {
-    const current = state.projects.find((p) => p.id === id);
-    if (!current) return;
-    const name = prompt("Nom du projet", current.name);
-    if (!name) return;
-    const targetRaw = prompt(
-      "Objectif (€)",
-      String((current.targetCents ?? 0) / 100),
-    );
-    if (targetRaw === null) return;
-    const target = cents(Number(targetRaw.replace(",", ".")));
-    update((s) => ({
-      ...s,
-      projects: s.projects.map((p) =>
-        p.id === id
-          ? { ...p, name, targetCents: target > 0 ? target : undefined }
-          : p,
-      ),
-    }));
-  }
-  function income(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget),
-      amount = Number(String(d.get("amount")).replace(",", ".")),
-      effectiveFrom = String(d.get("effectiveFrom"));
-    if (!member || amount < 0) return;
-    update((s) => {
-      const appliesToCurrent =
-          effectiveFrom <= s.budget.id && s.budget.status !== "CLOSED",
-        members = appliesToCurrent
-          ? s.members.map((m) =>
-              m.id === member ? { ...m, incomeCents: cents(amount) } : m,
-            )
-          : s.members,
-        budget = appliesToCurrent
-          ? {
-              ...s.budget,
-              lines: s.budget.lines.map((l) => ({
-                ...l,
-                shares: sharesFor(l.plannedCents, l.allocationType, members),
-              })),
-            }
-          : s.budget;
-      return {
-        ...s,
-        members,
-        budget,
-        incomeHistory: [
-          ...s.incomeHistory,
-          {
-            id: crypto.randomUUID(),
-            memberId: member,
-            amountCents: cents(amount),
-            effectiveFrom,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      };
-    });
-    setModal(null);
-  }
-  function close() {
-    if (
-      !confirm(
-        `Clôturer ${state.budget.label} et transférer ${euro(summary.transferableSurplusCents)} ?`,
-      )
-    )
-      return;
-    update((s) => {
-      const b = closeBudget(s.budget, s.members),
-        amount = b.closedSurplusCents ?? 0;
-      return {
-        ...s,
-        budget: b,
-        surplusCents: s.surplusCents + amount,
-        surplusEntries: amount
-          ? [
-              {
-                id: crypto.randomUUID(),
-                amountCents: amount,
-                label: `Clôture ${b.label}`,
-                date: b.label,
-                type: "saving",
-              },
-              ...s.surplusEntries,
-            ]
-          : s.surplusEntries,
-      };
-    });
-  }
-  function exportData() {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(
-      new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }),
-    );
-    a.download = "budg-backup.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-  function importData(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-      try {
-        setState(JSON.parse(String(r.result)));
-      } catch {
-        alert("Sauvegarde invalide");
-      }
+type Dialog =
+  | { type: "line"; line?: BudgetLine; template?: BudgetLine }
+  | { type: "expense"; lineId?: string; expense?: Expense }
+  | { type: "payment"; memberId?: string; payment?: Payment }
+  | { type: "close" }
+  | { type: "monthlyIncome" }
+  | { type: "coach" }
+  | { type: "potExpense"; expense?: PotExpense }
+  | {
+      type: "confirm";
+      title: string;
+      message: string;
+      action: (s: AppState) => AppState;
     };
-    r.readAsText(f);
-  }
-  function switchMonth(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const id = String(new FormData(e.currentTarget).get("month"));
-    if (!id || id === state.budget.id) {
-      setModal(null);
-      return;
+const navigation = [
+  ["dashboard", "Vue d’ensemble", Home],
+  ["budget", "Enveloppes", WalletCards],
+  ["expenses", "Dépenses", Receipt],
+  ["payments", "Versements", Users],
+  ["pot", "Pot commun", ArrowRight],
+  ["history", "Historique", HistoryIcon],
+  ["settings", "Paramètres", Settings],
+] as const;
+const errorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.name === "ZodError"
+      ? "Certaines données sont invalides. Vérifiez les montants, les dates et les champs obligatoires."
+      : error.message
+    : String(error);
+
+export default function App() {
+  const [state, setState] = useState<AppState | null>(null);
+  const current = useRef<AppState | null>(null),
+    locked = useRef(false);
+  const [view, setView] = useState<View>("dashboard"),
+    [dialog, setDialog] = useState<Dialog | null>(null);
+  const [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false),
+    [loading, setLoading] = useState(true);
+  const [loadingTask, setLoadingTask] = useState<"import" | "backups" | null>(
+    null,
+  );
+  const [backups, setBackups] = useState<Backup[]>([]);
+  useEffect(() => {
+    let active = true;
+    repository
+      .load()
+      .then((saved) => {
+        if (active) {
+          const s = saved ?? initialState();
+          current.current = s;
+          setState(s);
+        }
+      })
+      .catch((e) => {
+        if (active) setError(errorMessage(e));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  async function commit(
+    change: (s: AppState) => AppState,
+    message = "Modification enregistrée",
+  ) {
+    if (locked.current || !current.current) return false;
+    locked.current = true;
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const previous = current.current;
+      const next = await repository.save(change(previous), previous.revision);
+      current.current = next;
+      setState(next);
+      if (!next.configured) {
+        setView("dashboard");
+        setBackups([]);
+      }
+      setNotice(message);
+      return true;
+    } catch (e) {
+      setError(errorMessage(e));
+      return false;
+    } finally {
+      locked.current = false;
+      setBusy(false);
     }
-    update((s) => {
-      const existing = s.archivedBudgets.find((b) => b.id === id),
-        label = new Date(`${id}-02`)
-          .toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
-          .replace(/^./, (c) => c.toUpperCase()),
-        budget = existing ?? {
-          id,
-          label,
-          status: "ACTIVE",
-          lines: s.budget.lines.map((l) => ({
-            ...l,
-            shares: sharesFor(l.plannedCents, l.allocationType, s.members),
-          })),
-          expenses: [],
-          payments: [],
-        };
-      return {
-        ...s,
-        budget,
-        archivedBudgets: [
-          ...s.archivedBudgets.filter((b) => b.id !== id),
-          s.budget,
-        ],
-      };
-    });
-    setModal(null);
-    go("dashboard");
   }
-  function toggleSidebar() {
-    setCollapsed((v) => {
-      localStorage.setItem("budg-sidebar-collapsed", String(!v));
-      return !v;
-    });
+  async function submit(change: (s: AppState) => AppState, message?: string) {
+    const ok = await commit(change, message);
+    if (ok) setDialog(null);
+    return ok;
   }
+  function attempt(action: () => void) {
+    try {
+      action();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+  function open(next: Dialog) {
+    setError("");
+    setDialog(next);
+  }
+  function confirm(
+    title: string,
+    message: string,
+    action: (s: AppState) => AppState,
+  ) {
+    open({ type: "confirm", title, message, action });
+  }
+  function go(next: View) {
+    setView(next);
+    setNotice("");
+    setError("");
+  }
+  const actions: Actions = {
+    line: (line) => open({ type: "line", line }),
+    expense: (lineId, expense) => open({ type: "expense", lineId, expense }),
+    payment: (memberId, payment) =>
+      open({ type: "payment", memberId, payment }),
+    removeLine: (id) =>
+      confirm(
+        "Supprimer cette enveloppe ?",
+        "Seules les enveloppes sans dépenses et sans réserve reportée peuvent être supprimées.",
+        (s) => removeLine(s, id),
+      ),
+    removeExpense: (id) =>
+      confirm(
+        "Supprimer cette dépense ?",
+        "Le montant sera rendu disponible dans l’enveloppe. Une facture sera à nouveau marquée comme restant à régler.",
+        (s) => removeExpense(s, id),
+      ),
+    removePayment: (id) =>
+      confirm(
+        "Supprimer ce versement ?",
+        "Le solde du compte et les contributions seront recalculés.",
+        (s) => removePayment(s, id),
+      ),
+    settle: (id, settled) =>
+      confirm(
+        settled
+          ? "Confirmer la facture réglée ?"
+          : "Remettre cette facture à régler ?",
+        settled
+          ? "Confirmez qu’aucun paiement supplémentaire n’est attendu pour cette facture ce mois-ci. Cette action n’ajoute aucune dépense."
+          : "Cette facture devra être confirmée à nouveau avant la clôture.",
+        (s) => setSettled(s, id, settled),
+      ),
+    close: () => open({ type: "close" }),
+    next: () => open({ type: "monthlyIncome" }),
+    potExpense: (expense) => open({ type: "potExpense", expense }),
+    removePotExpense: (id) =>
+      confirm(
+        "Supprimer cette dépense du pot commun ?",
+        "Le montant redeviendra disponible dans le pot commun. Aucun mouvement bancaire n’est effectué.",
+        (s) => removePotExpense(s, id),
+      ),
+  };
+  async function readImport(file?: File) {
+    if (!file || loadingTask) return;
+    setLoadingTask("import");
+    try {
+      if (file.size > 10_000_000)
+        throw new Error("Le fichier est trop volumineux (10 Mo maximum).");
+      const restored = validateState(JSON.parse(await file.text()));
+      confirm(
+        "Restaurer cette sauvegarde ?",
+        `Elle contient ${restored.budget.label}, ${restored.archivedBudgets.length} mois archivé(s) et remplacera les données actuelles. Une copie automatique des données actuelles sera conservée.`,
+        (s) => ({ ...restored, revision: s.revision }),
+      );
+    } catch (e) {
+      setError(`Import impossible. ${errorMessage(e)}`);
+    } finally {
+      setLoadingTask(null);
+    }
+  }
+  async function listBackups() {
+    if (loadingTask) return;
+    setLoadingTask("backups");
+    try {
+      setBackups(await repository.backups());
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoadingTask(null);
+    }
+  }
+  if (loading) return <LoadingScreen />;
+  if (!state) return <Recovery error={error} />;
+  const b = state.budget,
+    summary = budgetSummary(b);
+  const closeDialog = () => {
+    if (!busy) {
+      setDialog(null);
+      setError("");
+    }
+  };
+  const activeDialogError = error ? (
+    <p className="alert error" role="alert">
+      {error}
+    </p>
+  ) : null;
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
-      <aside className={menu ? "open" : ""}>
-        <div className="logo">
-          <img src="/assets/budg-logo.png" alt="Logo BUDG" />
+    <div className="app-shell">
+      <aside>
+        <a
+          className="logo"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            go("dashboard");
+          }}
+        >
+          <span className="brand-symbol">
+            <img src="/assets/logo-mark.svg" alt="" />
+          </span>
           <b>BUDG</b>
-          <button
-            className="collapse-button"
-            aria-label={
-              collapsed ? "Déplier la navigation" : "Replier la navigation"
-            }
-            onClick={toggleSidebar}
-          >
-            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </button>
-          <button className="close-menu" onClick={() => setMenu(false)}>
-            <X />
-          </button>
-        </div>
-        <nav>
-          {navigation.map(([id, label, I]) => (
+        </a>
+        <p className="sidebar-caption">À deux, simplement.</p>
+        <span className="nav-eyebrow">VOTRE ESPACE</span>
+        <nav aria-label="Navigation principale">
+          {navigation.map(([id, title, Icon]) => (
             <button
-              title={label}
               key={id}
               className={view === id ? "active" : ""}
+              aria-current={view === id ? "page" : undefined}
               onClick={() => go(id)}
             >
-              <I size={18} />
-              <span>{label}</span>
+              <Icon size={19} />
+              <span>{title}</span>
             </button>
           ))}
         </nav>
-        <button
-          className="month-pick"
-          onClick={() => setModal("month")}
-          title={`Changer de mois — ${state.budget.label}`}
-        >
-          <CalendarDays size={16} />
-          <b>{state.budget.label}</b>
-          <ChevronRight size={16} />
-        </button>
-        <button
-          className="household"
-          onClick={() => go("settings")}
-          title="Configurer le foyer"
-        >
-          <span>JM</span>
-          <div>
-            <b>{state.householdName}</b>
-            <small>Foyer actif</small>
-          </div>
-          <ChevronRight size={15} />
-        </button>
+        <div className="sidebar-note">
+          <span>
+            <Sparkles size={17} />
+            Un peu chaque mois.
+          </span>
+          <p>De belles choses à deux.</p>
+          <div className="sidebar-note-line" />
+        </div>
+        <div className="sidebar-footer">
+          <span className="privacy-label">
+            <LockKeyhole size={12} />
+            Local · vos données restent ici
+          </span>
+          <small>{state.members.map((m) => m.name).join(" & ")}</small>
+        </div>
       </aside>
-      {menu && <div className="scrim" onClick={() => setMenu(false)} />}
       <main>
         <header>
-          <button className="menu-button" onClick={() => setMenu(true)}>
-            <Menu />
-          </button>
           <div>
-            <h1>
-              {view === "dashboard" ? (
-                "Tableau de bord"
-              ) : (
-                navigation.find((n) => n[0] === view)?.[1]
-              )}
-            </h1>
-            <p>
-              {view === "dashboard"
-                ? `Voici votre situation pour ${state.budget.label.toLowerCase()}.`
-                : state.budget.label}
+            <p className="eyebrow">
+              {b.label}{" "}
+              <span className={`badge ${b.status === "CLOSED" ? "green" : ""}`}>
+                {b.status === "CLOSED" ? "Clôturé" : "En cours"}
+              </span>
             </p>
+            <h1>{navigation.find((n) => n[0] === view)?.[1]}</h1>
           </div>
-          <div className="header-icons">
-            <button
-              aria-label="Ouvrir les paramètres"
-              onClick={() => go("settings")}
-            >
-              <Settings size={19} />
-            </button>
+          <div className="header-actions">
+            <span className="saved">
+              {busy ? <Spinner small /> : <CheckCircle2 size={15} />}
+              {busy ? "Enregistrement…" : "En local"}
+            </span>
+            {b.status === "ACTIVE" && state.configured && (
+              <button
+                className="primary"
+                disabled={busy || !b.lines.length}
+                onClick={() => actions.expense()}
+              >
+                <Plus size={17} />
+                Une dépense
+              </button>
+            )}
           </div>
         </header>
-        {view === "dashboard" && (
-          <Dashboard
-            s={state}
-            summary={summary}
-            go={go}
-            pay={(id: string) => {
-              setMember(id);
-              setModal("payment");
-            }}
-          />
+        {!dialog && error && (
+          <p className="alert error" role="alert">
+            {error}
+          </p>
         )}
-        {view === "budget" && (
-          <Budget
-            s={state}
-            summary={summary}
-            add={quickAddBudgetLine}
-            edit={editBudgetLine}
-            remove={removeBudgetLine}
-          />
-        )}{" "}
-        {view === "expenses" && (
-          <Expenses
-            s={state}
-            add={() => setModal("expense")}
-            remove={(id) =>
-              update((s) => ({
-                ...s,
-                budget: {
-                  ...s.budget,
-                  expenses: s.budget.expenses.filter((e) => e.id !== id),
-                },
-              }))
-            }
-          />
-        )}{" "}
-        {view === "contributions" && (
-          <Contributions
-            s={state}
-            summary={summary}
-            pay={(id: string) => {
-              setMember(id);
-              setModal("payment");
-            }}
-          />
+        {notice && <Toast message={notice} dismiss={() => setNotice("")} />}
+        {loadingTask === "import" && (
+          <div className="task-indicator" role="status">
+            <Spinner small />
+            Lecture de votre sauvegarde…
+          </div>
         )}
-        {view === "surplus" && <Surplus s={state} />}{" "}
-        {view === "projects" && (
-          <Projects
-            s={state}
-            add={() => {
-              setSelectedProject(null);
-              setModal("project");
-            }}
-            edit={editProject}
-            remove={(id: string) =>
-              confirm(
-                "Supprimer ce projet ? Le montant affecté sera rendu au Surplus.",
-              ) &&
-              update((s) => {
-                const p = s.projects.find((x) => x.id === id);
-                return {
-                  ...s,
-                  surplusCents: s.surplusCents + (p?.allocatedCents ?? 0),
-                  projects: s.projects.filter((x) => x.id !== id),
-                };
+        <fieldset
+          className="workspace"
+          disabled={busy}
+          aria-busy={busy}
+          key={view}
+        >
+          {!state.configured ? (
+            <section className="panel onboarding">
+              <div className="onboarding-story">
+                <span className="eyebrow">VOTRE NOUVEAU RITUEL À DEUX</span>
+                <h2>
+                  Les comptes au clair.
+                  <br />
+                  <em>Les projets en tête.</em>
+                </h2>
+                <HeroArt />
+                <div className="onboarding-trust">
+                  <LockKeyhole size={15} />
+                  <span>Un espace privé, juste pour vous.</span>
+                </div>
+              </div>
+              <div className="onboarding-form">
+                <span className="eyebrow">Étape 1 · Faisons connaissance</span>
+                <h2>Préparons votre budget à deux</h2>
+                <p>
+                  On commence par vos prénoms et vos salaires mensuels nets.
+                  Ensuite, je vous accompagne pour le logement, les courses et
+                  vos projets. Quelques petites étapes, et chacun saura quelle
+                  est sa part.
+                </p>
+                <HouseholdForm
+                  state={state}
+                  busy={busy}
+                  submit={(data) =>
+                    attempt(() => {
+                      const month = String(data.get("month"));
+                      void commit(
+                        (s) =>
+                          configureHousehold(
+                            s,
+                            s.members.map((m) =>
+                              String(data.get(`name-${m.id}`)),
+                            ),
+                            s.members.map((m) =>
+                              parseMoney(data.get(`income-${m.id}`), true),
+                            ),
+                            month,
+                            month,
+                          ),
+                        "Votre foyer est prêt. Renseignez maintenant les montants des enveloppes.",
+                      ).then((ok) => {
+                        if (ok) {
+                          go("budget");
+                          open({ type: "coach" });
+                        }
+                      });
+                    })
+                  }
+                />
+                <hr />
+                <label className="field">
+                  Vous avez déjà une sauvegarde BUDG ?
+                  <input
+                    type="file"
+                    disabled={loadingTask !== null}
+                    accept=".json,application/json"
+                    onChange={(e) => {
+                      void readImport(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </section>
+          ) : (
+            <>
+              {(view === "dashboard" || view === "budget") && (
+                <BudgetGuide
+                  state={state}
+                  actions={actions}
+                  prepare={() => open({ type: "coach" })}
+                  payments={() => go("payments")}
+                />
+              )}
+              {view === "dashboard" && (
+                <Dashboard
+                  state={state}
+                  actions={actions}
+                  openBudget={() => go("budget")}
+                />
+              )}
+              {view === "budget" && (
+                <>
+                  <div className="section-head">
+                    <div>
+                      <h2>Votre budget mensuel</h2>
+                      <p>
+                        Les montants prévus seront repris le mois suivant.
+                        L’argent n’est considéré reçu qu’après saisie d’un
+                        versement.
+                      </p>
+                    </div>
+                    {b.status === "ACTIVE" && (
+                      <button
+                        className="primary"
+                        onClick={() => actions.line()}
+                      >
+                        <Plus size={17} />
+                        Nouvelle enveloppe
+                      </button>
+                    )}
+                  </div>
+                  <Envelopes budget={b} actions={actions} />
+                  {b.status === "ACTIVE" && (
+                    <EnvelopeSuggestions
+                      lines={b.lines}
+                      choose={(template) => open({ type: "line", template })}
+                    />
+                  )}
+                </>
+              )}
+              {view === "expenses" && (
+                <Transactions budget={b} actions={actions} mode="expenses" />
+              )}
+              {view === "payments" && (
+                <>
+                  <Members budget={b} actions={actions} />
+                  <Transactions budget={b} actions={actions} mode="payments" />
+                </>
+              )}
+              {view === "pot" && <CommonPot state={state} actions={actions} />}
+              {view === "history" && <History state={state} />}
+              {view === "settings" && (
+                <div className="settings-layout">
+                  <section className="panel">
+                    <h2>Votre foyer et vos salaires</h2>
+                    <p>
+                      Le mois d’effet conserve les anciennes répartitions. Une
+                      modification ne change jamais un mois clôturé.
+                    </p>
+                    <HouseholdForm
+                      state={state}
+                      busy={busy}
+                      submit={(data) =>
+                        attempt(() => {
+                          void commit((s) =>
+                            configureHousehold(
+                              s,
+                              s.members.map((m) =>
+                                String(data.get(`name-${m.id}`)),
+                              ),
+                              s.members.map((m) =>
+                                parseMoney(data.get(`income-${m.id}`), true),
+                              ),
+                              String(data.get("month")),
+                            ),
+                          );
+                        })
+                      }
+                    />
+                    <details>
+                      <summary>Historique et changements programmés</summary>
+                      {[...state.incomeHistory]
+                        .sort((a, c) =>
+                          c.effectiveFrom.localeCompare(a.effectiveFrom),
+                        )
+                        .map((h) => (
+                          <p key={`${h.memberId}-${h.effectiveFrom}`}>
+                            {
+                              state.members.find((m) => m.id === h.memberId)
+                                ?.name
+                            }{" "}
+                            · {euro(h.amountCents)} · à partir de{" "}
+                            {monthLabel(h.effectiveFrom)}
+                          </p>
+                        ))}
+                    </details>
+                  </section>
+                  <section className="panel">
+                    <h2>Sauvegardes</h2>
+                    <p>
+                      {storageLabel}. Les 20 versions précédentes sont
+                      conservées automatiquement.
+                    </p>
+                    <p className="hint">
+                      Exportez aussi un fichier dans un dossier sauvegardé : les
+                      copies locales ne protègent pas d’une perte de
+                      l’ordinateur ou d’un effacement du navigateur.
+                    </p>
+                    <div className="stack">
+                      <button
+                        className="secondary"
+                        onClick={() => exportBackup(state)}
+                      >
+                        <Download size={17} />
+                        Exporter une sauvegarde
+                      </button>
+                      <label className="field">
+                        Importer une sauvegarde BUDG
+                        <input
+                          type="file"
+                          disabled={loadingTask !== null}
+                          accept=".json,application/json"
+                          onChange={(e) => {
+                            void readImport(e.target.files?.[0]);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <button
+                        className="secondary"
+                        disabled={loadingTask !== null}
+                        aria-busy={loadingTask === "backups"}
+                        onClick={() => {
+                          void listBackups();
+                        }}
+                      >
+                        {loadingTask === "backups" && <Spinner small />}
+                        {loadingTask === "backups"
+                          ? "Chargement des copies…"
+                          : "Afficher les copies automatiques"}
+                      </button>
+                      {backups.map((copy) => (
+                        <div className="backup-row" key={copy.id}>
+                          <span>
+                            {copy.createdAt
+                              ? new Date(copy.createdAt).toLocaleString("fr-FR")
+                              : `Version ${copy.state.revision}`}{" "}
+                            · {copy.state.budget.label}
+                          </span>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              attempt(() => {
+                                const restored = validateState(copy.state);
+                                confirm(
+                                  "Restaurer cette version ?",
+                                  "Les données actuelles seront remplacées et conservées dans une nouvelle copie automatique.",
+                                  (s) => ({
+                                    ...restored,
+                                    revision: s.revision,
+                                  }),
+                                );
+                              })
+                            }
+                          >
+                            Restaurer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <hr />
+                    <h3>Repartir sans opérations</h3>
+                    <p>
+                      Conserve vos noms, vos revenus et vos enveloppes. Supprime
+                      les dépenses, versements, réserves reportées et archives.
+                    </p>
+                    <button
+                      className="danger-button"
+                      onClick={() =>
+                        confirm(
+                          "Effacer les opérations financières ?",
+                          "Les opérations, le pot commun et les archives seront effacés. Vos enveloppes et vos revenus sont conservés. Une copie automatique sera créée.",
+                          resetState,
+                        )
+                      }
+                    >
+                      Effacer les opérations
+                    </button>
+                    <hr />
+                    <h3>Recommencer depuis le début</h3>
+                    <p>
+                      Remet les salaires à zéro, efface vos prénoms, vos
+                      enveloppes personnalisées et toutes les opérations. Vous
+                      retrouvez le guide de démarrage et les enveloppes
+                      proposées, sans montant.
+                    </p>
+                    <button
+                      className="danger-button"
+                      onClick={() =>
+                        confirm(
+                          "Tout réinitialiser ?",
+                          "Vos prénoms, salaires, changements de revenus programmés, enveloppes personnalisées, dépenses, versements, réserves, pot commun et archives seront retirés du budget actif. Vous reviendrez au premier écran. Une sauvegarde automatique sera conservée pour pouvoir revenir en arrière ; les sauvegardes existantes ne sont pas supprimées.",
+                          resetEverything,
+                        )
+                      }
+                    >
+                      Tout réinitialiser
+                    </button>
+                  </section>
+                  <section className="panel usage">
+                    <h2>Votre routine en quatre étapes</h2>
+                    <ol>
+                      <li>
+                        Préparez les enveloppes et vérifiez la contribution de
+                        chacun.
+                      </li>
+                      <li>
+                        Enregistrez les virements reçus sur le compte commun.
+                      </li>
+                      <li>
+                        Saisissez les achats et prélèvements réellement
+                        effectués.
+                      </li>
+                      <li>
+                        Clôturez le mois pour garder le surplus dans le pot
+                        commun, puis préparez le suivant.
+                      </li>
+                    </ol>
+                    <p>
+                      Le solde affiché est calculé à partir de vos saisies.
+                      Aucune connexion bancaire ni aucun virement automatique.
+                    </p>
+                  </section>
+                </div>
+              )}
+            </>
+          )}
+        </fieldset>
+      </main>
+      {dialog?.type === "line" && (
+        <Modal
+          title={dialog.line ? "Modifier l’enveloppe" : "Nouvelle enveloppe"}
+          close={closeDialog}
+        >
+          {activeDialogError}
+          <LineForm
+            line={dialog.line ?? dialog.template}
+            busy={busy}
+            submit={(data) =>
+              attempt(() => {
+                const day = String(data.get("dueDay") ?? "");
+                void submit((s) =>
+                  saveLine(s, {
+                    id: dialog.line?.id ?? uid(),
+                    name: String(data.get("name")),
+                    plannedCents: parseMoney(data.get("amount"), true),
+                    expenseGroup: String(
+                      data.get("group"),
+                    ) as BudgetLine["expenseGroup"],
+                    kind: String(data.get("kind")) as BudgetLine["kind"],
+                    dueDay: day ? Number(day) : undefined,
+                  }),
+                );
               })
             }
-            allocate={allocateProject}
           />
-        )}{" "}
-        {view === "history" && <HistoryView s={state} />}{" "}
-        {view === "settings" && (
-          <SettingsView
-            s={state}
-            setState={setState}
-            exportData={exportData}
-            importData={importData}
-            editIncome={(id: string) => {
-              setMember(id);
-              setModal("income");
+        </Modal>
+      )}
+      {dialog?.type === "expense" && (
+        <Modal
+          title={
+            dialog.expense ? "Modifier la dépense" : "Enregistrer une dépense"
+          }
+          close={closeDialog}
+        >
+          {activeDialogError}
+          <ExpenseForm
+            state={state}
+            lineId={dialog.lineId}
+            expense={dialog.expense}
+            busy={busy}
+            submit={(data) =>
+              attempt(() => {
+                void submit(
+                  (s) =>
+                    saveExpense(
+                      s,
+                      {
+                        id: dialog.expense?.id ?? uid(),
+                        lineId: String(data.get("lineId")),
+                        amountCents: parseMoney(data.get("amount")),
+                        date: String(data.get("date")),
+                        description: String(data.get("description")),
+                      },
+                      data.get("settled") === "on",
+                    ),
+                  "Dépense enregistrée et déduite de l’enveloppe.",
+                );
+              })
+            }
+          />
+        </Modal>
+      )}
+      {dialog?.type === "payment" && (
+        <Modal
+          title={
+            dialog.payment
+              ? "Modifier le versement"
+              : "Enregistrer un versement reçu"
+          }
+          close={closeDialog}
+        >
+          {activeDialogError}
+          <PaymentForm
+            state={state}
+            memberId={dialog.memberId}
+            payment={dialog.payment}
+            busy={busy}
+            submit={(data) =>
+              attempt(() => {
+                void submit(
+                  (s) =>
+                    savePayment(s, {
+                      id: dialog.payment?.id ?? uid(),
+                      memberId: String(data.get("memberId")),
+                      amountCents: parseMoney(data.get("amount")),
+                      date: String(data.get("date")),
+                      note: String(data.get("note")),
+                    }),
+                  "Versement enregistré : les enveloppes sont actualisées.",
+                );
+              })
+            }
+          />
+        </Modal>
+      )}
+      {dialog?.type === "coach" && (
+        <Modal title="Construisons vos enveloppes" close={closeDialog}>
+          {activeDialogError}
+          <EnvelopeCoach
+            state={state}
+            busy={busy}
+            save={(line, amount) =>
+              commit(
+                (s) => saveLine(s, { ...line, plannedCents: amount }),
+                "Une enveloppe de plus, votre budget prend forme !",
+              )
+            }
+            finish={() => {
+              setDialog(null);
+              go("dashboard");
+            }}
+            custom={() => {
+              setDialog(null);
+              go("budget");
             }}
           />
-        )}{" "}
-        {view === "dashboard" && state.budget.status !== "CLOSED" && (
-          <button className="close-month" onClick={close}>
-            Clôturer le mois <ChevronRight size={17} />
-          </button>
-        )}
-      </main>
-      <MobileNav view={view} go={go} add={() => setModal("expense")} />
-      {modal === "expense" && (
-        <Modal title="Retirer d’une enveloppe" close={() => setModal(null)}>
-          <form onSubmit={expense}>
-            <p className="form-hint">
-              Enregistrez ici une sortie du compte commun. Le montant sera
-              retiré de l’enveloppe choisie et son reste sera recalculé
-              immédiatement.
-            </p>
-            <Field
-              label="Montant retiré (€)"
-              name="amount"
-              placeholder="100,00"
-            />
-            <label>
-              Enveloppe concernée
-              <select name="line">
-                <optgroup label="Appartement">
-                  {state.budget.lines
-                    .filter((l) => l.expenseGroup === "HOUSING")
-                    .map((l) => (
-                      <option value={l.id} key={l.id}>
-                        {l.name} — reste{" "}
-                        {euro(
-                          Math.max(
-                            0,
-                            l.plannedCents -
-                              state.budget.expenses
-                                .filter((e) => e.lineId === l.id)
-                                .reduce((n, e) => n + e.amountCents, 0),
-                          ),
-                        )}
-                      </option>
-                    ))}
-                </optgroup>
-                <optgroup label="Vie quotidienne">
-                  {state.budget.lines
-                    .filter((l) => l.expenseGroup !== "HOUSING")
-                    .map((l) => (
-                      <option value={l.id} key={l.id}>
-                        {l.name} — reste{" "}
-                        {euro(
-                          Math.max(
-                            0,
-                            l.plannedCents -
-                              state.budget.expenses
-                                .filter((e) => e.lineId === l.id)
-                                .reduce((n, e) => n + e.amountCents, 0),
-                          ),
-                        )}
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
-            </label>
-            <Field
-              label="Motif de la sortie"
-              name="description"
-              placeholder="Ex. Courses Carrefour"
-            />
-            <Field label="Date" name="date" type="date" value={iso()} />
-            <button className="primary full">Confirmer la sortie</button>
-          </form>
         </Modal>
       )}
-      {modal === "payment" && member && (
-        <Modal
-          title={`Versement de ${state.members.find((m) => m.id === member)?.name}`}
-          close={() => setModal(null)}
-        >
-          <form onSubmit={payment}>
-            <div className="payment-context">
-              <span>
-                Compte destinataire<b>Compte commun · {state.budget.label}</b>
-              </span>
-              <span>
-                Contribution attendue<b>{euro(summary.expected[member])}</b>
-              </span>
-              <span>
-                Déjà versé<b>{euro(summary.paid[member])}</b>
-              </span>
-              <span>
-                Reste à verser
-                <b className="orange">
-                  {euro(
-                    Math.max(
-                      0,
-                      summary.expected[member] - summary.paid[member],
-                    ),
-                  )}
-                </b>
-              </span>
-            </div>
-            <Field
-              label="Montant du versement (€)"
-              name="amount"
-              placeholder={(
-                Math.max(0, summary.expected[member] - summary.paid[member]) /
-                100
-              ).toFixed(2)}
-            />
-            <Field
-              label="Date du versement"
-              name="date"
-              type="date"
-              value={iso()}
-            />
-            <Field
-              label="Note"
-              name="note"
-              placeholder="Ex. Virement compte commun"
-              required={false}
-            />
-            <p className="form-hint">
-              Ce versement finance la contribution globale du mois. Il n’est pas
-              rattaché à une dépense ou une catégorie particulière.
-            </p>
-            <button className="primary full">Confirmer le versement</button>
-          </form>
+      {dialog?.type === "monthlyIncome" && (
+        <Modal title="Les salaires de ce nouveau mois" close={closeDialog}>
+          {activeDialogError}
+          <MonthlyIncomeForm
+            state={state}
+            busy={busy}
+            submit={(data) =>
+              attempt(() => {
+                const incomes = state.members.map((m) =>
+                  parseMoney(data.get(`income-${m.id}`), true),
+                );
+                void submit(
+                  (s) => confirmMonthlyIncomes(s, incomes),
+                  "Salaires confirmés et nouveau mois préparé.",
+                ).then((ok) => {
+                  if (ok) setView("dashboard");
+                });
+              })
+            }
+          />
         </Modal>
       )}
-      {modal === "project" && (
-        <Modal title="Nouveau projet" close={() => setModal(null)}>
-          <form onSubmit={project}>
-            <Field label="Nom" name="name" placeholder="Ex. Vacances" />
-            <Field label="Objectif (€)" name="target" placeholder="2 000" />
-            <button className="primary full">Créer le projet</button>
-          </form>
-        </Modal>
-      )}
-      {modal === "income" && (
-        <Modal
-          title={`Nouveau revenu — ${state.members.find((m) => m.id === member)?.name}`}
-          close={() => setModal(null)}
-        >
-          <form onSubmit={income}>
-            <Field
-              label="Revenu net mensuel (€)"
-              name="amount"
-              placeholder="3 100"
-            />
-            <Field
-              label="Applicable à partir de"
-              name="effectiveFrom"
-              type="month"
-              value={state.budget.id}
-            />
-            <p className="form-hint">
-              Le nouveau ratio est appliqué aux budgets actifs à partir de ce
-              mois. Les mois clôturés ne changent jamais.
-            </p>
-            <button className="primary full">Enregistrer le changement</button>
-          </form>
-        </Modal>
-      )}
-      {modal === "month" && (
-        <Modal title="Choisir le mois" close={() => setModal(null)}>
-          <form onSubmit={switchMonth}>
-            <Field
-              label="Mois et année"
-              name="month"
-              type="month"
-              value={state.budget.id}
-            />
-            <p className="form-hint">
-              Un mois déjà utilisé conserve ses propres versements, dépenses et
-              répartitions. Un nouveau mois reprend les enveloppes actuelles
-              avec des compteurs vides.
-            </p>
-            <button className="primary full">Afficher ce mois</button>
-          </form>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-function Dashboard({ s, summary, go, pay }: any) {
-  return (
-    <>
-      <div className="dashboard-grid">
-        <Panel title="Contributions" link={() => go("contributions")}>
-          <div className="contrib-list">
-            {s.members.map((m: any) => {
-              const left = Math.max(
-                0,
-                summary.expected[m.id] - summary.paid[m.id],
-              );
-              return (
-                <div className="person" key={m.id}>
-                  <div className={`face ${m.id}`}>{m.name[0]}</div>
-                  <div>
-                    <b>{m.name}</b>
-                    <small>{euro(summary.expected[m.id])} attendus</small>
-                  </div>
-                  <strong>
-                    {euro(summary.paid[m.id])}
-                    <small className={left ? "warn" : "ok"}>
-                      {left ? `${euro(left)} à verser` : "À jour ✓"}
-                    </small>
-                  </strong>
-                  {left > 0 && (
-                    <button onClick={() => pay(m.id)}>
-                      <Plus />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-        <Panel title="Budget du mois" link={() => go("budget")}>
-          <Donut spent={summary.spentCents} planned={summary.plannedCents} />
-          <b className="available">
-            {euro(Math.max(0, summary.plannedCents - summary.spentCents))}{" "}
-            disponibles
-          </b>
-        </Panel>
-        <Panel title="Pot Surplus" link={() => go("surplus")}>
-          <div className="surplus-hero">
-            <div>
-              <strong>{euro(s.surplusCents)}</strong>
-              <span>disponibles</span>
-              <b>+170 € ce mois</b>
-            </div>
-            <img src="/assets/budg-plant.png" />
-          </div>
-        </Panel>
-      </div>
-      <div className="lower-grid">
-        <BudgetTable s={s} />
-        <Recent s={s} go={go} />
-      </div>
-    </>
-  );
-}
-function Panel({ title, children, link }: any) {
-  return (
-    <section className="panel">
-      <h3>{title}</h3>
-      {children}
-      <button className="panel-link" onClick={link}>
-        Voir le détail <ChevronRight size={14} />
-      </button>
-    </section>
-  );
-}
-function Donut({ spent, planned }: { spent: number; planned: number }) {
-  const p = Math.min(100, (spent / planned) * 100);
-  return (
-    <div className="donut-wrap">
-      <div>
-        <b>{euro(planned)}</b>
-        <small>prévu</small>
-      </div>
-      <div
-        className="donut"
-        style={{ background: `conic-gradient(#2e7559 ${p}%,#dceadf 0)` }}
-      >
-        <span>
-          <b>{euro(spent)}</b>
-          <small>dépensés</small>
-        </span>
-      </div>
-    </div>
-  );
-}
-function BudgetTable({ s, detailed = false }: { s: AppState; detailed?: boolean }) {
-  return (
-    <section className="panel budget-list">
-      <h3>Enveloppes du mois</h3>
-      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => (
-        <div className="budget-group" key={group}>
-          <h4>{group === "HOUSING" ? "Appartement" : "Vie quotidienne"}</h4>
-          {s.budget.lines
-            .filter((l) => (l.expenseGroup ?? "DAILY_LIFE") === group)
-            .map((l) => {
-              const n = s.budget.expenses
-                  .filter((e) => e.lineId === l.id)
-                  .reduce((a, b) => a + b.amountCents, 0),
-                remaining = l.plannedCents - n,
-                p = Math.min(100, (n / l.plannedCents) * 100);
-              return (
-                <div className="budget-row" key={l.id}>
-                  <b>{l.name}</b>
-                  <span>{euro(l.plannedCents)} prévus</span>
-                  <div>
-                    <i
-                      className={remaining < 0 ? "over" : ""}
-                      style={{ width: `${p}%` }}
-                    />
-                  </div>
-                  <small className={remaining < 0 ? "over-text" : ""}>
-                    {remaining >= 0
-                      ? `${euro(remaining)} restants`
-                      : `${euro(Math.abs(remaining))} dépassés`}
-                  </small>
-                  {detailed && (
-                    <FundingBreakdown line={l} amount={l.plannedCents} members={s.members} />
-                  )}
-                </div>
-              );
-            })}
-        </div>
-      ))}
-    </section>
-  );
-}
-function FundingBreakdown({
-  line,
-  amount,
-  members,
-}: {
-  line: AppState["budget"]["lines"][number];
-  amount: number;
-  members: AppState["members"];
-}) {
-  const weights = members.map(
-      (member) =>
-        line.shares.find((share) => share.memberId === member.id)?.amountCents ??
-        0,
-    ),
-    parts = splitAmount(
-      amount,
-      weights,
-      members.map((member) => member.id),
-    );
-  return (
-    <div className="funding-breakdown">
-      <span>Payé par le compte commun</span>
-      {members.map((member, index) => (
-        <b key={member.id}>
-          {member.name} finance {euro(parts[index])}
-        </b>
-      ))}
-    </div>
-  );
-}
-function Recent({ s, go }: { s: AppState; go: (v: View) => void }) {
-  return (
-    <section className="panel recent">
-      <h3>Dépenses récentes</h3>
-      {[...s.budget.expenses]
-        .reverse()
-        .slice(0, 5)
-        .map((e) => (
-          <div key={e.id}>
-            <span>
-              <Receipt size={15} />
-            </span>
-            <p>
-              <b>{e.description}</b>
-              <small>
-                {new Date(e.date).toLocaleDateString("fr-FR", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </small>
-            </p>
-            <strong>{euro(e.amountCents)}</strong>
-          </div>
-        ))}
-      <button className="panel-link" onClick={() => go("expenses")}>
-        Voir toutes les dépenses <ChevronRight size={14} />
-      </button>
-    </section>
-  );
-}
-function Budget({
-  s,
-  summary,
-  add,
-  edit,
-  remove,
-}: {
-  s: AppState;
-  summary: any;
-  add: () => void;
-  edit: (id: string) => void;
-  remove: (id: string) => void;
-}) {
-  return (
-    <>
-      <div className="budget-explanation">
-        <div>
-          <h2>Budget prévisionnel · {s.budget.label}</h2>
+      {dialog?.type === "close" && (
+        <Modal title={`Clôturer ${b.label}`} close={closeDialog}>
+          {activeDialogError}
           <p>
-            Ces enveloppes définissent ce que le foyer prévoit de dépenser.
-            Elles servent à calculer les contributions attendues, même avant
-            toute dépense réelle.
+            Vérifiez que tous les achats et prélèvements du mois ont été saisis.
+            La clôture fige les dépenses et les versements.
           </p>
-        </div>
-        <button
-          className="primary"
-          onClick={add}
-          disabled={s.budget.status === "CLOSED"}
-        >
-          <Plus />
-          Nouvelle enveloppe
-        </button>
-      </div>
-      <div className="page-grid">
-        <section className="panel summary-card">
-          <Donut spent={summary.spentCents} planned={summary.plannedCents} />
-          <div className="metric">
-            <span>Reste disponible</span>
-            <b>
-              {euro(Math.max(0, summary.plannedCents - summary.spentCents))}
-            </b>
-          </div>
-          <div className="metric">
-            <span>Origine des contributions</span>
-            <b>{s.budget.lines.length} enveloppes prévues</b>
-          </div>
-        </section>
-        <section>
-          <BudgetTable s={s} detailed />
-          <div className="budget-admin panel">
-            {s.budget.lines.map((l) => (
-              <div key={l.id}>
-                <span>
-                  <b>{l.name}</b>
-                  <small>
-                    {euro(l.plannedCents)} · {l.allocationType === "PRO_RATA" ? "Prorata" : "50/50"}
-                  </small>
-                </span>
-                <div className="budget-admin-actions">
-                  <button
-                    disabled={s.budget.status === "CLOSED"}
-                    onClick={() => edit(l.id)}
-                  >
-                    Modifier
-                  </button>
-                  <button
-                    disabled={s.budget.status === "CLOSED"}
-                    onClick={() =>
-                      confirm(
-                        `Supprimer l’enveloppe ${l.name} et ses sorties ?`,
-                      ) && remove(l.id)
-                    }
-                  >
-                    <Trash2 />
-                    Supprimer
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-function Expenses({
-  s,
-  add,
-  remove,
-}: {
-  s: AppState;
-  add: () => void;
-  remove: (id: string) => void;
-}) {
-  return (
-    <section className="panel page-panel">
-      <div className="section-head">
-        <div>
-          <h2>Sorties des enveloppes</h2>
-          <p>
-            {s.budget.expenses.length} sorties ce mois, séparées selon leur
-            usage
-          </p>
-        </div>
-        <button className="primary" onClick={add}>
-          <Plus />
-          Nouvelle sortie
-        </button>
-      </div>
-      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => {
-        const lines = s.budget.lines.filter(
-            (l) => (l.expenseGroup ?? "DAILY_LIFE") === group,
-          ),
-          ids = new Set(lines.map((l) => l.id)),
-          items = [...s.budget.expenses]
-            .filter((e) => ids.has(e.lineId))
-            .reverse(),
-          total = items.reduce((n, e) => n + e.amountCents, 0);
-        return (
-          <div className="expense-section" key={group}>
-            <div className="expense-group-head">
-              <div>
-                <span className={group === "HOUSING" ? "housing" : "daily"}>
-                  {group === "HOUSING" ? <Home /> : <Receipt />}
-                </span>
-                <h3>
-                  {group === "HOUSING" ? "Appartement" : "Vie quotidienne"}
-                </h3>
-              </div>
-              <strong>{euro(total)} retirés</strong>
-            </div>
-            <div className="transaction-list">
-              {items.map((e) => {
-                const line = s.budget.lines.find((l) => l.id === e.lineId);
-                return <div className="expense-transaction" key={e.id}>
-                  <span className="transaction-icon">
-                    <Receipt />
-                  </span>
-                  <p>
-                    <b>{e.description}</b>
-                    <small>
-                      {s.budget.lines.find((l) => l.id === e.lineId)?.name} ·{" "}
-                      {new Date(e.date).toLocaleDateString("fr-FR")}
-                    </small>
-                  </p>
-                  <strong>-{euro(e.amountCents)}</strong>
-                  <button
-                    className="trash"
-                    onClick={() =>
-                      confirm("Supprimer cette sortie ?") && remove(e.id)
-                    }
-                  >
-                    <Trash2 />
-                  </button>
-                  {line && <FundingBreakdown line={line} amount={e.amountCents} members={s.members} />}
-                </div>;
-              })}
-              {items.length === 0 && (
-                <p className="empty-group">
-                  Aucune sortie réelle enregistrée. Les enveloppes prévues
-                  restent visibles dans Budget jusqu’à leur utilisation.
-                </p>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-function Contributions({ s, summary, pay }: any) {
-  return (
-    <>
-      <div className="contribution-intro">
-        <div>
-          <h2>Compte commun · {s.budget.label}</h2>
-          <p>
-            Les contributions viennent du budget prévisionnel. Le reste personnel
-            indique ce que chacun conserve sur son revenu après avoir financé sa
-            part du mois.
-          </p>
-        </div>
-      </div>
-      <div className="cards-two">
-        {s.members.map((m: any) => {
-          const left = Math.max(0, summary.expected[m.id] - summary.paid[m.id]);
-          return (
-            <section className="panel member-detail" key={m.id}>
-              <div className={`face large ${m.id}`}>{m.name[0]}</div>
-              <h2>{m.name}</h2>
-              <div className="metric">
-                <span>Contribution attendue</span>
-                <b>{euro(summary.expected[m.id])}</b>
-              </div>
-              <div className="metric personal-remainder">
-                <span>Reste personnel après contribution</span>
-                <b
-                  className={
-                    m.incomeCents - summary.expected[m.id] < 0
-                      ? "orange"
-                      : "green"
-                  }
-                >
-                  {euro(m.incomeCents - summary.expected[m.id])}
-                </b>
-              </div>
-              <div className="metric">
-                <span>Déjà versé</span>
-                <b className="green">{euro(summary.paid[m.id])}</b>
-              </div>
-              <div className="metric">
-                <span>{left ? "Reste à verser" : "Statut"}</span>
-                <b className={left ? "orange" : "green"}>
-                  {left ? euro(left) : "À jour ✓"}
-                </b>
-              </div>
-              <button className="secondary full" onClick={() => pay(m.id)}>
-                Ajouter un versement
-              </button>
-            </section>
-          );
-        })}
-      </div>
-      <AllocationBreakdown s={s} />
-      <section className="panel page-panel payment-history">
-        <h2>Historique des versements</h2>
-        <div className="transaction-list">
-          {[...s.budget.payments].reverse().map((p: any) => (
-            <div key={p.id}>
-              <div className={`face ${p.memberId}`}>
-                {s.members.find((m: any) => m.id === p.memberId)?.name[0]}
-              </div>
-              <p>
-                <b>
-                  {s.members.find((m: any) => m.id === p.memberId)?.name} →
-                  Compte commun
-                </b>
-                <small>
-                  {new Date(p.date).toLocaleDateString("fr-FR")}
-                  {p.note ? ` · ${p.note}` : ""}
-                </small>
-              </p>
-              <strong className="green">{euro(p.amountCents)}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
-}
-function AllocationBreakdown({ s }: { s: AppState }) {
-  const summary = budgetSummary(s.budget, s.members);
-  return (
-    <section className="panel page-panel allocation-breakdown">
-      <div className="section-head">
-        <div>
-          <h2>Qui paie quoi ?</h2>
-          <p>Détail des contributions prévues pour chaque enveloppe.</p>
-        </div>
-      </div>
-      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => {
-        const lines = s.budget.lines.filter(
-          (line) => (line.expenseGroup ?? "DAILY_LIFE") === group,
-        );
-        return <div className="allocation-group" key={group}>
-          <h3>{group === "HOUSING" ? "Appartement" : "Vie quotidienne"}</h3>
-          {lines.map((l) => (
-              <div className="allocation-row" key={l.id}>
-                <div className="allocation-name">
-                  <b>{l.name}</b>
-                  <small>
-                    {euro(l.plannedCents)} ·{" "}
-                    {l.allocationType === "PRO_RATA"
-                      ? "Au prorata des revenus"
-                      : l.allocationType === "FIFTY_FIFTY"
-                        ? "50 / 50"
-                        : l.allocationType}
-                  </small>
-                </div>
-                <div className="allocation-members">
-                  {s.members.map((m) => {
-                    const amount =
-                        l.shares.find((x) => x.memberId === m.id)
-                          ?.amountCents ?? 0,
-                      percent = l.plannedCents
-                        ? (amount / l.plannedCents) * 100
-                        : 0;
-                    return (
-                      <div key={m.id}>
-                        <span className={`mini-face ${m.id}`}>{m.name[0]}</span>
-                        <p>
-                          <small>
-                            {m.name} · {percent.toFixed(1).replace(".", ",")} %
-                          </small>
-                          <b>{euro(amount)}</b>
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          <div className="allocation-subtotal">
-            <span>Total {group === "HOUSING" ? "Appartement" : "Vie quotidienne"}</span>
-            {s.members.map((member) => (
-              <div key={member.id}>
-                <small>{member.name} doit financer</small>
-                <b>
-                  {euro(
-                    lines.reduce(
-                      (total, line) =>
-                        total +
-                        (line.shares.find(
-                          (share) => share.memberId === member.id,
-                        )?.amountCents ?? 0),
-                      0,
-                    ),
-                  )}
-                </b>
-              </div>
-            ))}
-          </div>
-        </div>
-      })}
-      <div className="monthly-contribution-summary">
-        <h3>Total du mois</h3>
-        {s.members.map((member) => {
-          const expected = summary.expected[member.id],
-            paid = summary.paid[member.id],
-            remaining = Math.max(0, expected - paid),
-            personalRemainder = member.incomeCents - expected;
-          return (
-            <div key={member.id}>
-              <span className={`mini-face ${member.id}`}>{member.name[0]}</span>
-              <p><b>{member.name}</b><small>Attendu {euro(expected)}</small></p>
-              <span><small>Déjà versé</small><b className="green">{euro(paid)}</b></span>
-              <span><small>Reste</small><b className={remaining ? "orange" : "green"}>{remaining ? euro(remaining) : "À jour ✓"}</b></span>
-              <span><small>Après contribution</small><b className={personalRemainder < 0 ? "orange" : "green"}>{euro(personalRemainder)}</b></span>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-function Surplus({ s }: { s: AppState }) {
-  return (
-    <div className="surplus-page">
-      <section className="panel surplus-balance">
-        <div>
-          <span>Solde actuel</span>
-          <strong>{euro(s.surplusCents)}</strong>
-          <small>argent commun disponible</small>
-        </div>
-        <img src="/assets/budg-plant.png" />
-      </section>
-      <section className="panel page-panel">
-        <h2>Historique</h2>
-        <div className="transaction-list">
-          {s.surplusEntries.map((x) => (
-            <div key={x.id}>
-              <span className="transaction-icon">
-                <Sparkles />
-              </span>
-              <p>
-                <b>{x.label}</b>
-                <small>{x.date}</small>
-              </p>
-              <strong className={x.amountCents >= 0 ? "green" : "orange"}>
-                {x.amountCents >= 0 ? "+" : ""}
-                {euro(x.amountCents)}
-              </strong>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-function Projects({
-  s,
-  add,
-  edit,
-  remove,
-  allocate,
-}: {
-  s: AppState;
-  add: () => void;
-  edit: (id: string) => void;
-  remove: (id: string) => void;
-  allocate: (id: string) => void;
-}) {
-  return (
-    <section className="panel page-panel">
-      <div className="section-head">
-        <div>
-          <h2>Projets communs</h2>
-          <p>Surplus disponible : {euro(s.surplusCents)}</p>
-        </div>
-        <button className="primary" onClick={add}>
-          <Plus />
-          Nouveau projet
-        </button>
-      </div>
-      <div className="project-grid">
-        {s.projects.map((p) => {
-          const ratio = p.targetCents
-            ? Math.min(100, (p.allocatedCents / p.targetCents) * 100)
-            : 0;
-          return (
-            <article key={p.id}>
-              <div className="project-icon">
-                <Target />
-              </div>
-              <h3>{p.name}</h3>
-              <strong>
-                {euro(p.allocatedCents)}{" "}
-                <small>/ {euro(p.targetCents ?? 0)}</small>
-              </strong>
-              <div className="bar">
-                <i style={{ width: `${ratio}%` }} />
-              </div>
-              <p>{Math.round(ratio)} % financé</p>
-              <div className="project-actions">
-                <button onClick={() => allocate(p.id)}>Affecter</button>
-                <button onClick={() => edit(p.id)}>Modifier</button>
-                <button className="delete" onClick={() => remove(p.id)}>
-                  <Trash2 />
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-function HistoryView({ s }: { s: AppState }) {
-  const budgets = [s.budget, ...s.archivedBudgets].sort((a, b) =>
-    b.id.localeCompare(a.id),
-  );
-  return (
-    <section className="panel page-panel">
-      <div className="section-head">
-        <div>
-          <h2>Historique mensuel</h2>
-          <p>
-            Dépliez un mois pour retrouver son budget, ses sorties et ses
-            contributions.
-          </p>
-        </div>
-      </div>
-      <div className="history-list">
-        {budgets.map((b) => {
-          const planned = b.lines.reduce((n, l) => n + l.plannedCents, 0),
-            spent = b.expenses.reduce((n, e) => n + e.amountCents, 0),
-            paid = b.payments.reduce((n, p) => n + p.amountCents, 0);
-          return (
-            <details className="history-detail" key={b.id}>
-              <summary>
-                <CalendarDays />
-                <div>
-                  <b>{b.label}</b>
-                  <span>
-                    {b.status === "CLOSED"
-                      ? "Budget clôturé"
-                      : "Budget en cours"}
-                  </span>
-                </div>
-                <strong>{euro(b.closedSurplusCents ?? 0)} de Surplus</strong>
-                <ChevronRight />
-              </summary>
-              <div className="history-content">
-                <div className="history-metrics">
-                  <span>
-                    Prévu<b>{euro(planned)}</b>
-                  </span>
-                  <span>
-                    Dépensé<b>{euro(spent)}</b>
-                  </span>
-                  <span>
-                    Versé sur le compte<b>{euro(paid)}</b>
-                  </span>
-                </div>
-                <h4>Enveloppes</h4>
-                {b.lines.map((l) => {
-                  const actual = b.expenses
-                    .filter((e) => e.lineId === l.id)
-                    .reduce((n, e) => n + e.amountCents, 0);
-                  return (
-                    <div className="history-line" key={l.id}>
-                      <span>{l.name}</span>
-                      <b>
-                        {euro(actual)} / {euro(l.plannedCents)}
-                      </b>
-                      <FundingBreakdown
-                        line={l}
-                        amount={l.plannedCents}
-                        members={s.members}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-function SettingsView({
-  s,
-  setState,
-  exportData,
-  importData,
-  editIncome,
-}: any) {
-  const total = s.members.reduce((n: number, m: any) => n + m.incomeCents, 0);
-  return (
-    <>
-      <div className="settings-grid">
-        <section className="panel page-panel">
-          <h2>Foyer et revenus</h2>
-          <p className="muted">
-            Les revenus déterminent automatiquement la répartition au prorata.
-          </p>
-          {s.members.map((m: any) => (
-            <div className="setting-row" key={m.id}>
-              <div className={`face ${m.id}`}>{m.name[0]}</div>
-              <div>
-                <b>{m.name}</b>
-                <small>
-                  {total
-                    ? ((m.incomeCents / total) * 100)
-                        .toFixed(2)
-                        .replace(".", ",")
-                    : "0"}{" "}
-                  % du revenu du foyer
-                </small>
-              </div>
-              <strong>{euro(m.incomeCents)}</strong>
-              <button className="edit-income" onClick={() => editIncome(m.id)}>
-                Modifier
-              </button>
-            </div>
-          ))}
-        </section>
-        <section className="panel page-panel">
-          <h2>Données locales</h2>
-          <p className="muted">
-            Exportez une sauvegarde complète ou restaurez vos données. Rien ne
-            quitte cet appareil.
-          </p>
-          <button className="secondary full" onClick={exportData}>
-            <Download />
-            Exporter une sauvegarde
-          </button>
-          <label className="secondary full upload">
-            <Upload />
-            Restaurer une sauvegarde
-            <input
-              type="file"
-              accept="application/json"
-              onChange={importData}
+          <div className="metrics two">
+            <Metric
+              label="Encore à verser"
+              value={euro(summary.missingCents)}
             />
-          </label>
-          <button
-            className="danger-button"
-            onClick={() => {
-              if (
-                confirm(
-                  "Effacer toutes les dépenses, versements, projets et le Surplus ? La configuration du foyer et des enveloppes sera conservée.",
-                )
-              )
-                setState(resetState());
+            <Metric
+              label="Réserves à conserver"
+              value={euro(summary.reservedCents)}
+            />
+          </div>
+          {summary.unpaidBills.length > 0 && (
+            <div className="alert warning">
+              Factures à confirmer :{" "}
+              {summary.unpaidBills.map((l) => l.name).join(", ")}. Enregistrez
+              leur paiement ou confirmez qu’il ne reste rien à régler dans
+              Enveloppes.
+            </div>
+          )}
+          <Metric
+            label="Surplus à conserver dans le pot commun"
+            value={euro(summary.surplusCents)}
+            detail="Les réserves affectées sont exclues de ce montant"
+            tone="green"
+          />
+          <p className="hint">
+            Cette somme reste sur le compte commun. Elle sera identifiée « Pot
+            commun », sans remboursement personnel et sans nouveau virement.
+            Elle s’ajoute au pot existant de{" "}
+            {euro(potSummary(state).availableCents)}.
+          </p>
+          <Form
+            busy={busy}
+            button="Clôturer et conserver le surplus"
+            submit={() => {
+              void submit(
+                closeMonth,
+                "Mois clôturé. Le surplus a rejoint votre pot commun.",
+              ).then((ok) => {
+                if (ok) setView("pot");
+              });
             }}
           >
-            Effacer les données financières
-          </button>
-        </section>
-      </div>
-      <section className="panel page-panel income-history">
-        <h2>Historique des revenus</h2>
-        <div className="transaction-list">
-          {[...s.incomeHistory]
-            .sort((a: any, b: any) =>
-              b.effectiveFrom.localeCompare(a.effectiveFrom),
-            )
-            .map((x: any) => (
-              <div key={x.id}>
-                <div className={`face ${x.memberId}`}>
-                  {s.members.find((m: any) => m.id === x.memberId)?.name[0]}
-                </div>
-                <p>
-                  <b>{s.members.find((m: any) => m.id === x.memberId)?.name}</b>
-                  <small>
-                    À partir de{" "}
-                    {new Date(`${x.effectiveFrom}-02`).toLocaleDateString(
-                      "fr-FR",
-                      { month: "long", year: "numeric" },
-                    )}
-                  </small>
-                </p>
-                <strong>{euro(x.amountCents)}</strong>
-              </div>
-            ))}
-        </div>
-      </section>
-      <section className="panel page-panel usage">
-        <h2>Comment utiliser BUDG ?</h2>
-        <ol>
-          <li>Vérifiez les revenus et leur date d’effet.</li>
-          <li>
-            Préparez les enveloppes du mois : chaque ligne choisit 50/50 ou
-            prorata.
-          </li>
-          <li>Consultez la contribution calculée de chaque membre.</li>
-          <li>Enregistrez les versements sur le compte commun.</li>
-          <li>Ajoutez les dépenses au fil du mois.</li>
-          <li>Contrôlez les enveloppes, puis clôturez le mois.</li>
-          <li>Affectez ensuite le Surplus à vos projets communs.</li>
-        </ol>
-      </section>
-    </>
-  );
-}
-function MobileNav({ view, go, add }: any) {
-  return (
-    <nav className="mobile-nav">
-      {(["dashboard", "budget", "add", "surplus", "settings"] as const).map(
-        (id) =>
-          id === "add" ? (
-            <button className="mobile-add" key={id} onClick={add}>
-              <Plus />
-              <span>Sortie</span>
-            </button>
-          ) : (
-            (() => {
-              const n = navigation.find((x) => x[0] === id)!;
-              const I = n[2];
-              return (
-                <button
-                  key={id}
-                  className={view === id ? "active" : ""}
-                  onClick={() => go(id)}
-                >
-                  <I />
-                  <span>{id === "dashboard" ? "Accueil" : n[1]}</span>
-                </button>
-              );
-            })()
-          ),
+            <label className="checkbox">
+              <input type="checkbox" required />
+              Toutes les dépenses du mois sont enregistrées.
+            </label>
+          </Form>
+        </Modal>
       )}
-    </nav>
-  );
-}
-function Modal({ title, close, children }: any) {
-  return (
-    <div className="overlay" onMouseDown={close}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button onClick={close}>
-            <X />
-          </button>
-        </div>
-        {children}
-      </div>
+      {dialog?.type === "potExpense" && (
+        <Modal
+          title={
+            dialog.expense
+              ? "Modifier la dépense du pot commun"
+              : "Utiliser le pot commun"
+          }
+          close={closeDialog}
+        >
+          {activeDialogError}
+          <p>
+            Disponible :{" "}
+            <b>
+              {euro(
+                potSummary(state).availableCents +
+                  (dialog.expense?.amountCents ?? 0),
+              )}
+            </b>
+            . Enregistrez un achat déjà payé depuis le compte commun ; il sera
+            identifié « Pot commun ».
+          </p>
+          <Form
+            busy={busy}
+            submit={(data) =>
+              attempt(() => {
+                void submit(
+                  (s) =>
+                    savePotExpense(s, {
+                      id: dialog.expense?.id ?? uid(),
+                      amountCents: parseMoney(data.get("amount")),
+                      date: String(data.get("date")),
+                      description: String(data.get("description")),
+                    }),
+                  "Dépense enregistrée dans le pot commun.",
+                );
+              })
+            }
+          >
+            <Field
+              label="Montant payé (€)"
+              name="amount"
+              value={dialog.expense ? dialog.expense.amountCents / 100 : ""}
+            />
+            <Field
+              label="Date de la dépense"
+              name="date"
+              type="date"
+              value={dialog.expense?.date ?? today()}
+              max={today()}
+            />
+            <Field
+              label="Description"
+              name="description"
+              value={dialog.expense?.description}
+              placeholder="Ex. Sortie à deux"
+            />
+          </Form>
+        </Modal>
+      )}
+      {dialog?.type === "confirm" && (
+        <Modal title={dialog.title} close={closeDialog}>
+          {activeDialogError}
+          <p>{dialog.message}</p>
+          <div className="actions">
+            <button className="secondary" disabled={busy} onClick={closeDialog}>
+              Annuler
+            </button>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                void submit(dialog.action);
+              }}
+            >
+              {busy && <Spinner />}
+              {busy ? "Enregistrement…" : "Confirmer"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
-function Field({
-  label,
-  name,
-  placeholder,
-  type = "text",
-  value,
-  required = true,
-}: any) {
+function Recovery({ error }: { error: string }) {
+  const [message, setMessage] = useState(error),
+    [copies, setCopies] = useState<Backup[]>([]);
+  const [candidate, setCandidate] = useState<AppState | null>(null),
+    [busy, setBusy] = useState(false);
+  async function choose(file?: File) {
+    if (!file) return;
+    try {
+      if (file.size > 10_000_000) throw new Error("Fichier trop volumineux.");
+      setCandidate(validateState(JSON.parse(await file.text())));
+    } catch (e) {
+      setMessage(errorMessage(e));
+    }
+  }
+  async function restore() {
+    if (!candidate || busy) return;
+    setBusy(true);
+    try {
+      await repository.recover(candidate);
+      window.location.reload();
+    } catch (e) {
+      setMessage(errorMessage(e));
+      setBusy(false);
+    }
+  }
   return (
-    <label>
-      {label}
-      <input
-        autoFocus={name === "amount" || name === "name"}
-        name={name}
-        placeholder={placeholder}
-        type={type}
-        defaultValue={value}
-        required={required}
-      />
-    </label>
+    <div className="loading panel">
+      <h1>Récupérer votre budget</h1>
+      <p className="alert error" role="alert">
+        {message}
+      </p>
+      <p>
+        Vos données n’ont pas été remplacées. Vous pouvez réessayer ou choisir
+        une sauvegarde à restaurer.
+      </p>
+      <div className="stack">
+        <button className="secondary" onClick={() => window.location.reload()}>
+          Réessayer
+        </button>
+        <label className="field">
+          Choisir une sauvegarde
+          <input
+            type="file"
+            accept=".json,application/json"
+            disabled={busy}
+            onChange={(e) => {
+              void choose(e.target.files?.[0]);
+            }}
+          />
+        </label>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={() => {
+            void repository
+              .backups()
+              .then(setCopies)
+              .catch((e) => setMessage(errorMessage(e)));
+          }}
+        >
+          Afficher les copies automatiques
+        </button>
+        {copies.map((copy) => (
+          <button
+            className="secondary"
+            key={copy.id}
+            disabled={busy}
+            onClick={() => {
+              try {
+                setCandidate(validateState(copy.state));
+              } catch (e) {
+                setMessage(errorMessage(e));
+              }
+            }}
+          >
+            Version {copy.state.revision} · {copy.state.budget.label}
+          </button>
+        ))}
+        {candidate && (
+          <div className="notice">
+            <p>
+              Restaurer {candidate.budget.label}, avec{" "}
+              {candidate.archivedBudgets.length} mois archivé(s) ? Cette
+              sauvegarde remplacera les données locales actuelles.
+            </p>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                void restore();
+              }}
+            >
+              {busy && <Spinner />}
+              {busy ? "Restauration…" : "Confirmer la restauration"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
