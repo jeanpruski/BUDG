@@ -29,7 +29,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["credit", "Prêt immobilier", "HOUSING", "FIXED"],
     ["electricite", "Électricité", "HOUSING", "FIXED"],
     ["assurance", "Assurance habitation", "HOUSING", "FIXED"],
-    ["taxe-habitation", "Taxe d’habitation", "HOUSING", "RESERVE"],
+    ["taxe-fonciere", "Taxe foncière", "HOUSING", "RESERVE"],
     ["charges", "Charges de copropriété", "HOUSING", "RESERVE"],
     ["internet", "Box internet", "HOUSING", "FIXED"],
     ["courses", "Courses", "DAILY_LIFE", "VARIABLE"],
@@ -94,7 +94,8 @@ export function saveLine(
   line: Pick<
     BudgetLine,
     "id" | "name" | "plannedCents" | "expenseGroup" | "kind" | "dueDay"
-  >,
+  > &
+    Partial<Pick<BudgetLine, "allocationType" | "customPercentages">>,
 ): AppState {
   active(s);
   const old = s.budget.lines.find((l) => l.id === line.id);
@@ -114,12 +115,24 @@ export function saveLine(
       "Cette enveloppe contient une réserve reportée : conservez son type et sa répartition.",
     );
   const allocationType =
-    line.expenseGroup === "HOUSING" ? "PRO_RATA" : "FIFTY_FIFTY";
+    line.allocationType ??
+    old?.allocationType ??
+    (line.expenseGroup === "HOUSING" ? "PRO_RATA" : "FIFTY_FIFTY");
+  const customPercentages =
+    allocationType === "CUSTOM"
+      ? (line.customPercentages ?? old?.customPercentages)
+      : undefined;
   const updated: BudgetLine = {
     ...line,
     name: line.name.trim(),
     allocationType,
-    shares: sharesFor(line.plannedCents, allocationType, s.budget.members),
+    customPercentages,
+    shares: sharesFor(
+      line.plannedCents,
+      allocationType,
+      s.budget.members,
+      customPercentages,
+    ),
     openingShares: old?.openingShares ?? zeroShares(s.members),
     settled: old?.settled ?? false,
   };
@@ -257,7 +270,12 @@ export function configureHousehold(
         members: monthlyMembers,
         lines: result.budget.lines.map((l) => ({
           ...l,
-          shares: sharesFor(l.plannedCents, l.allocationType, monthlyMembers),
+          shares: sharesFor(
+            l.plannedCents,
+            l.allocationType,
+            monthlyMembers,
+            l.customPercentages,
+          ),
         })),
       },
     };
@@ -284,7 +302,12 @@ export function startNextMonth(s: AppState) {
       lines: s.budget.lines.map((l) => ({
         ...l,
         settled: false,
-        shares: sharesFor(l.plannedCents, l.allocationType, members),
+        shares: sharesFor(
+          l.plannedCents,
+          l.allocationType,
+          members,
+          l.customPercentages,
+        ),
         openingShares: s.budget.members.map((m, i) => ({
           memberId: m.id,
           amountCents: summary.lines.find((x) => x.id === l.id)!.reservedShares[
@@ -334,6 +357,7 @@ export function resetState(s: AppState) {
           l.plannedCents,
           l.allocationType,
           membersForMonth(s, s.budget.id),
+          l.customPercentages,
         ),
         openingShares: zeroShares(s.members),
         settled: false,

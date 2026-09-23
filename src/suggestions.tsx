@@ -2,7 +2,7 @@ import { BudgetLine } from "./domain";
 
 export const envelopeSuggestions = [
   {
-    name: "Taxe d’habitation",
+    name: "Taxe foncière",
     expenseGroup: "HOUSING",
     kind: "RESERVE",
     hint: "Si elle vous concerne : mettez de côté une part chaque mois, puis saisissez le paiement réel à son échéance.",
@@ -30,12 +30,6 @@ export const envelopeSuggestions = [
     expenseGroup: "HOUSING",
     kind: "FIXED",
     hint: "Votre mensualité, uniquement si elle n’est pas déjà comprise dans l’électricité ou les charges.",
-  },
-  {
-    name: "Taxe foncière",
-    expenseGroup: "HOUSING",
-    kind: "RESERVE",
-    hint: "Si elle vous concerne : une provision mensuelle pour préparer le paiement.",
   },
   {
     name: "Entretien de l’appartement",

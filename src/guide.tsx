@@ -1,3 +1,4 @@
+import { AllocationFields, readAllocation } from "./AllocationFields";
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, Compass, Sparkles } from "lucide-react";
 import {
@@ -110,8 +111,8 @@ export function BudgetGuide({
             <h3>1. Prévoir</h3>
             <p>
               Exemple : vous prévoyez 400 € de courses. Chacun doit apporter 200
-              €. Les dépenses de l’appartement suivent, elles, le prorata des
-              salaires.
+              €. Chaque enveloppe peut suivre les salaires, rester à 50/50 ou
+              utiliser vos propres pourcentages.
             </p>
           </article>
           <article>
@@ -225,10 +226,10 @@ export function EnvelopeCoach({
       <div className="coach-prompt">
         <span className="eyebrow">
           {line.expenseGroup === "HOUSING"
-            ? "LE COCON · AU PRORATA"
+            ? "LE COCON"
             : line.kind === "RESERVE"
-              ? "LES PROJETS · À 50/50"
-              : "LE QUOTIDIEN · À 50/50"}
+              ? "LES PROJETS"
+              : "LE QUOTIDIEN"}
         </span>
         <h3>{line.name}</h3>
         <p>
@@ -252,7 +253,10 @@ export function EnvelopeCoach({
           setError("");
           try {
             const amount = parseMoney(data.get("amount"), true);
-            void save(line, amount).then((ok) => {
+            void save(
+              { ...line, ...readAllocation(data, state.budget.members) },
+              amount,
+            ).then((ok) => {
               if (ok) setIndex(index + 1);
             });
           } catch (e) {
@@ -265,6 +269,11 @@ export function EnvelopeCoach({
           name="amount"
           value={line.plannedCents ? line.plannedCents / 100 : ""}
           placeholder="Votre estimation"
+        />
+        <AllocationFields
+          members={state.budget.members}
+          line={line}
+          defaultType={line.allocationType}
         />
         <p className="hint">
           0 € est possible si vous ne prévoyez rien pour cette enveloppe.

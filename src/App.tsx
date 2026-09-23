@@ -1,3 +1,4 @@
+import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
 import { EnvelopeSuggestions } from "./suggestions";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
@@ -712,6 +713,7 @@ export default function App() {
           {activeDialogError}
           <LineForm
             line={dialog.line ?? dialog.template}
+            members={b.members}
             busy={busy}
             submit={(data) =>
               attempt(() => {
@@ -721,6 +723,7 @@ export default function App() {
                     id: dialog.line?.id ?? uid(),
                     name: String(data.get("name")),
                     plannedCents: parseMoney(data.get("amount"), true),
+                    ...readAllocation(data, s.budget.members),
                     expenseGroup: String(
                       data.get("group"),
                     ) as BudgetLine["expenseGroup"],

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   AppState,
+  allocationLabel,
   Budget,
   BudgetLine,
   Expense,
@@ -77,11 +78,11 @@ export function Dashboard({
           <div className="hero-rule">
             <span>
               <House size={13} />
-              Appartement au prorata
+              Logement à votre rythme
             </span>
             <span>
               <ShoppingBag size={13} />
-              Quotidien à 50/50
+              Répartition au choix
             </span>
           </div>
         </div>
@@ -292,9 +293,7 @@ export function Envelopes({
               </span>
               {group === "HOUSING" ? "Appartement" : "Vie quotidienne"}
             </h3>
-            <span>
-              {group === "HOUSING" ? "Au prorata des salaires" : "50/50"}
-            </span>
+            <span>Répartition par enveloppe</span>
           </div>
           <div className="envelopes">
             {summary.lines
@@ -338,6 +337,16 @@ export function Envelopes({
                                 : "Facture à régler"}
                       </span>
                     </div>
+                    <p className="hint">
+                      {allocationLabel(l)}
+                      {l.allocationType === "CUSTOM" &&
+                        l.customPercentages
+                          ?.map(
+                            (p) =>
+                              ` · ${budget.members.find((m) => m.id === p.memberId)?.name} ${p.percent} %`,
+                          )
+                          .join("")}
+                    </p>
                     <div className="envelope-amount">
                       <strong className={l.available < 0 ? "text-red" : ""}>
                         {euro(l.available)}
@@ -800,11 +809,7 @@ export function History({ state }: { state: AppState }) {
                         <td>{l.name}</td>
                         <td>{euro(l.plannedCents)}</td>
                         <td>{euro(l.spent)}</td>
-                        <td>
-                          {l.allocationType === "PRO_RATA"
-                            ? "Prorata"
-                            : "50/50"}
-                        </td>
+                        <td>{allocationLabel(l)}</td>
                       </tr>
                     ))}
                   </tbody>

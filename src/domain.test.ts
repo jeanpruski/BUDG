@@ -541,3 +541,111 @@ it("réinitialise tout le foyer et revient au démarrage sans anciens revenus", 
   expect(clean.potExpenses).toEqual([]);
   expect(previous.members[0].incomeCents).toBe(450000);
 });
+
+describe("répartition au choix par enveloppe", () => {
+  const custom = [
+    { memberId: "jean", percent: 70 },
+    { memberId: "miruna", percent: 30 },
+  ];
+  it("autorise 50/50 pour le logement et le prorata pour le quotidien", () => {
+    let s = line(
+      line(setup(), "logement", 100000, "HOUSING"),
+      "courses",
+      50000,
+    );
+    s = saveLine(s, { ...s.budget.lines[0], allocationType: "FIFTY_FIFTY" });
+    s = saveLine(s, { ...s.budget.lines[1], allocationType: "PRO_RATA" });
+    expect(
+      s.budget.lines.map((l) => l.shares.map((p) => p.amountCents)),
+    ).toEqual([
+      [50000, 50000],
+      [30000, 20000],
+    ]);
+  });
+  it("préserve le manuel malgré un changement de salaire et le passage de mois", () => {
+    let s = line(setup(), "courses", 10001);
+    s = saveLine(s, {
+      ...s.budget.lines[0],
+      allocationType: "CUSTOM",
+      customPercentages: custom,
+    });
+    expect(s.budget.lines[0].shares.map((p) => p.amountCents)).toEqual([
+      7001, 3000,
+    ]);
+    s = configureHousehold(s, ["Jean", "Miruna"], [100000, 400000], "2026-08");
+    expect(s.budget.lines[0].shares.map((p) => p.amountCents)).toEqual([
+      7001, 3000,
+    ]);
+    s = startNextMonth(closeMonth(paid(s)));
+    expect(s.budget.lines[0].customPercentages).toEqual(custom);
+    expect(s.budget.lines[0].shares.map((p) => p.amountCents)).toEqual([
+      7001, 3000,
+    ]);
+    expect(validateState(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+  it("répartit les achats non prévus selon le manuel, même à budget zéro", () => {
+    let s = line(setup(), "courses", 0);
+    s = saveLine(s, {
+      ...s.budget.lines[0],
+      allocationType: "CUSTOM",
+      customPercentages: custom,
+    });
+    s = saveExpense(
+      s,
+      {
+        id: "achat",
+        lineId: "courses",
+        date: "2026-08-01",
+        amountCents: 10000,
+        description: "Achat",
+      },
+      false,
+    );
+    expect(budgetSummary(s.budget).lines[0].costs).toEqual([7000, 3000]);
+  });
+  it("garde la propriété des réserves déjà reportées lors d’un nouveau choix", () => {
+    let s = line(setup(), "projet", 10000, "DAILY_LIFE", "RESERVE");
+    s = startNextMonth(closeMonth(paid(s)));
+    const opening = s.budget.lines[0].openingShares;
+    s = saveLine(s, {
+      ...s.budget.lines[0],
+      allocationType: "CUSTOM",
+      customPercentages: custom,
+    });
+    expect(s.budget.lines[0].openingShares).toEqual(opening);
+    expect(s.budget.lines[0].shares.map((p) => p.amountCents)).toEqual([
+      7000, 3000,
+    ]);
+  });
+  it("refuse un total invalide et les personnes dupliquées, accepte 100/0", () => {
+    const s = line(setup(), "courses", 10000);
+    for (const parts of [
+      [
+        { memberId: "jean", percent: 60 },
+        { memberId: "miruna", percent: 60 },
+      ],
+      [
+        { memberId: "jean", percent: 50 },
+        { memberId: "jean", percent: 50 },
+      ],
+    ])
+      expect(() =>
+        saveLine(s, {
+          ...s.budget.lines[0],
+          allocationType: "CUSTOM",
+          customPercentages: parts,
+        }),
+      ).toThrow();
+    const result = saveLine(s, {
+      ...s.budget.lines[0],
+      allocationType: "CUSTOM",
+      customPercentages: [
+        { memberId: "jean", percent: 100 },
+        { memberId: "miruna", percent: 0 },
+      ],
+    });
+    expect(result.budget.lines[0].shares.map((p) => p.amountCents)).toEqual([
+      10000, 0,
+    ]);
+  });
+});

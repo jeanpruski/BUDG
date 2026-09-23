@@ -22,7 +22,11 @@ const lineSchema = z.object({
   plannedCents: money,
   expenseGroup: z.enum(["HOUSING", "DAILY_LIFE"]),
   kind: z.enum(["FIXED", "VARIABLE", "RESERVE"]),
-  allocationType: z.enum(["PRO_RATA", "FIFTY_FIFTY"]),
+  allocationType: z.enum(["PRO_RATA", "FIFTY_FIFTY", "CUSTOM"]),
+  customPercentages: z
+    .array(z.object({ memberId: id, percent: z.number().min(0).max(100) }))
+    .length(2)
+    .optional(),
   shares: z.array(shareSchema).length(2),
   openingShares: z.array(shareSchema).length(2),
   settled: z.boolean(),
@@ -158,14 +162,49 @@ export function splitAmount(
   for (let i = 0; i < remainder; i++) parts[order[i % order.length].i]++;
   return parts;
 }
+export function allocationWeights(
+  type: AllocationType,
+  members: Member[],
+  custom?: BudgetLine["customPercentages"],
+) {
+  if (type !== "CUSTOM")
+    return members.map((m) => (type === "PRO_RATA" ? m.incomeCents : 1));
+  if (
+    !custom ||
+    custom.length !== members.length ||
+    new Set(custom.map((x) => x.memberId)).size !== members.length ||
+    custom.some(
+      (x) =>
+        !members.some((m) => m.id === x.memberId) ||
+        !Number.isFinite(x.percent) ||
+        x.percent < 0 ||
+        x.percent > 100,
+    ) ||
+    Math.abs(custom.reduce((n, x) => n + x.percent, 0) - 100) > 0.000001
+  )
+    throw new Error(
+      "Les pourcentages doivent totaliser 100 % pour les deux personnes.",
+    );
+  return members.map((m) => custom.find((x) => x.memberId === m.id)!.percent);
+}
+export function allocationLabel(
+  line: Pick<BudgetLine, "allocationType" | "customPercentages">,
+) {
+  return line.allocationType === "PRO_RATA"
+    ? "Selon les salaires"
+    : line.allocationType === "CUSTOM"
+      ? "Pourcentages personnalisés"
+      : "50/50";
+}
 export function sharesFor(
   amount: number,
   type: AllocationType,
   members: Member[],
+  customPercentages?: BudgetLine["customPercentages"],
 ): Share[] {
   return splitAmount(
     amount,
-    members.map((m) => (type === "PRO_RATA" ? m.incomeCents : 1)),
+    allocationWeights(type, members, customPercentages),
     members.map((m) => m.id),
   ).map((n, i) => ({ memberId: members[i].id, amountCents: n }));
 }
@@ -215,8 +254,10 @@ export function budgetSummary(budget: Budget) {
     const weights =
       capacity > 0
         ? capacityShares
-        : members.map((m) =>
-            line.allocationType === "PRO_RATA" ? m.incomeCents : 1,
+        : allocationWeights(
+            line.allocationType,
+            members,
+            line.customPercentages,
           );
     const costs = splitAmount(spent, weights, ids);
     const reservedShares = capacityShares.map((n, i) =>
@@ -397,6 +438,13 @@ function migrateState(raw: unknown): unknown {
 }
 export function validateState(raw: unknown): AppState {
   const s = stateSchema.parse(migrateState(raw));
+  // Correct the old envelope label while preserving IDs, amounts and linked operations.
+  for (const budget of [s.budget, ...s.archivedBudgets]) {
+    for (const line of budget.lines) {
+      if (/^taxe d[’']habitation$/i.test(line.name.trim()))
+        line.name = "Taxe foncière";
+    }
+  }
   const ids = s.members.map((m) => m.id);
   if (new Set(ids).size !== 2)
     throw new Error("Deux membres distincts sont nécessaires.");
@@ -422,13 +470,14 @@ export function validateState(raw: unknown): AppState {
           shares.some((x) => !ids.includes(x.memberId))
         )
           throw new Error("Répartition invalide.");
-      if (
-        sum(l.shares.map((x) => x.amountCents)) !== l.plannedCents ||
-        l.allocationType !==
-          (l.expenseGroup === "HOUSING" ? "PRO_RATA" : "FIFTY_FIFTY")
-      )
+      if (sum(l.shares.map((x) => x.amountCents)) !== l.plannedCents)
         throw new Error("Répartition incohérente.");
-      const computed = sharesFor(l.plannedCents, l.allocationType, b.members);
+      const computed = sharesFor(
+        l.plannedCents,
+        l.allocationType,
+        b.members,
+        l.customPercentages,
+      );
       if (
         l.shares.some(
           (share) =>

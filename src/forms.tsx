@@ -1,6 +1,8 @@
+import { AllocationFields } from "./AllocationFields";
 import { useState } from "react";
 import {
   AppState,
+  Member,
   BudgetLine,
   Expense,
   Payment,
@@ -66,10 +68,12 @@ export function HouseholdForm({
 }
 export function LineForm({
   line,
+  members,
   busy,
   submit,
 }: {
   line?: BudgetLine;
+  members: Member[];
   busy: boolean;
   submit: (data: FormData) => void;
 }) {
@@ -92,8 +96,8 @@ export function LineForm({
             setGroup(e.target.value as BudgetLine["expenseGroup"])
           }
         >
-          <option value="HOUSING">Appartement — au prorata des salaires</option>
-          <option value="DAILY_LIFE">Vie quotidienne — 50/50</option>
+          <option value="HOUSING">Appartement</option>
+          <option value="DAILY_LIFE">Vie quotidienne</option>
         </select>
       </label>
       <Field
@@ -101,6 +105,12 @@ export function LineForm({
         name="amount"
         value={line ? line.plannedCents / 100 : ""}
         placeholder="Ex. 500"
+      />
+      <AllocationFields
+        key={line?.id ?? group}
+        members={members}
+        line={line}
+        defaultType={group === "HOUSING" ? "PRO_RATA" : "FIFTY_FIFTY"}
       />
       <label className="field">
         Fonctionnement
@@ -374,8 +384,9 @@ export function MonthlyIncomeForm({
         ),
       )}
       <p className="hint">
-        L’appartement sera réparti au prorata de ces salaires. Les dépenses à
-        50/50 gardent la même répartition. Le mois clôturé reste inchangé.
+        Les enveloppes « Selon vos salaires » seront recalculées. Les
+        répartitions à 50/50 ou personnalisées sont conservées. Le mois clôturé
+        reste inchangé.
       </p>
     </Form>
   );
