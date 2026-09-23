@@ -135,7 +135,7 @@ export function LoadingScreen() {
       aria-busy="true"
     >
       <div className="loading-brand">
-        <img src="/assets/logo-mark.svg" alt="" width="44" height="44" />
+        <img src="/assets/budg-logo.png" alt="" width="44" height="44" />
         <strong>BUDG</strong>
       </div>
       <div className="loading-skeleton" aria-hidden="true">

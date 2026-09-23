@@ -1,3 +1,4 @@
+import { MobileMenu } from "./MobileMenu";
 import { EnvelopeSuggestions } from "./suggestions";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
 import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
@@ -285,6 +286,24 @@ export default function App() {
   ) : null;
   return (
     <div className="app-shell">
+      <MobileMenu home={() => go("dashboard")}>
+        {(close) =>
+          navigation.map(([id, title, Icon]) => (
+            <button
+              key={id}
+              className={view === id ? "active" : ""}
+              aria-current={view === id ? "page" : undefined}
+              onClick={() => {
+                go(id);
+                close();
+              }}
+            >
+              <Icon size={20} />
+              <span>{title}</span>
+            </button>
+          ))
+        }
+      </MobileMenu>
       <aside>
         <a
           className="logo"
@@ -295,7 +314,7 @@ export default function App() {
           }}
         >
           <span className="brand-symbol">
-            <img src="/assets/logo-mark.svg" alt="" />
+            <img src="/assets/budg-logo.png" alt="" />
           </span>
           <b>BUDG</b>
         </a>
@@ -315,11 +334,6 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-note">
-          <span>
-            <Sparkles size={17} />
-            Un peu chaque mois.
-          </span>
-          <p>De belles choses à deux.</p>
           <div className="sidebar-note-line" />
         </div>
         <div className="sidebar-footer">
