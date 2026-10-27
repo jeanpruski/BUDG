@@ -67,9 +67,6 @@ export function AuthenticationGate({ children }: {
     <main className="auth-stage">
       <section className="panel auth-card">
         <div className="auth-brand"><img src="/assets/budg-logo.png" alt="" width="48" height="48" /><strong>BUDG</strong></div>
-        <span className="eyebrow"><LockKeyhole size={14} /> VOTRE ESPACE PARTAGÉ</span>
-        <h1>{failed ? "Connexion au serveur impossible" : "Retrouvez votre budget"}</h1>
-        <p>Connectez-vous avec votre compte pour consulter votre budget commun.</p>
         {error && <p className="alert error" role="alert">{error}</p>}
         {failed ? <button className="primary full" onClick={() => setAttempt((n) => n + 1)}>Réessayer</button> : (
           <form onSubmit={(e) => { void signIn(e); }}>

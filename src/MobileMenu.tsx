@@ -80,7 +80,6 @@ export function MobileMenu({
         <nav aria-label="Navigation mobile">
           {children(() => setOpen(false))}
         </nav>
-        <p className="mobile-menu-note">À deux, simplement.</p>
       </dialog>
     </div>
   );

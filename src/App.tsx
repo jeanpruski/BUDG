@@ -382,8 +382,6 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           </span>
           <b>BUDG</b>
         </a>
-        <p className="sidebar-caption">À deux, simplement.</p>
-        <span className="nav-eyebrow">VOTRE ESPACE</span>
         <nav aria-label="Navigation principale">
           {navigation.map(([id, title, Icon]) => (
             <button
