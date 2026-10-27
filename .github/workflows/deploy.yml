@@ -63,7 +63,7 @@ jobs:
         run: tar -czf budg-release.tar.gz dist server-dist app.cjs package.json package-lock.json
 
       - name: Preserve verified build
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node.js 24
         with:
           name: budg-online-${{ github.sha }}
           path: budg-release.tar.gz
@@ -81,7 +81,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Retrieve verified build
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7, Node.js 24
         with:
           name: budg-online-${{ github.sha }}
 
