@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { useEffect, useRef, useState, ReactNode } from "react";
 import { Menu, X } from "lucide-react";
 
@@ -34,7 +35,7 @@ export function MobileMenu({
         onClick={home}
         aria-label="BUDG — accueil"
       >
-        <img src="/assets/budg-logo.png" alt="" /> <strong>BUDG</strong>
+        <BrandMark /> <strong>BUDG</strong>
       </button>
       <button
         className="mobile-menu-toggle"

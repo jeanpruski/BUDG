@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { LockKeyhole, LogOut } from "lucide-react";
 import { ApiError, RemoteUser, SESSION_EXPIRED_EVENT, clearSessionToken, getSession, login, logout } from "./remote";
@@ -66,7 +67,7 @@ export function AuthenticationGate({ children }: {
   return (
     <main className="auth-stage">
       <section className="panel auth-card">
-        <div className="auth-brand"><img src="/assets/budg-logo.png" alt="" width="48" height="48" /><strong>BUDG</strong></div>
+        <div className="auth-brand"><BrandMark size={48} /><strong>BUDG</strong></div>
         {error && <p className="alert error" role="alert">{error}</p>}
         {failed ? <button className="primary full" onClick={() => setAttempt((n) => n + 1)}>Réessayer</button> : (
           <form onSubmit={(e) => { void signIn(e); }}>

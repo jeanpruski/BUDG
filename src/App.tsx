@@ -1,4 +1,5 @@
 import { AuthenticationGate, SessionControls } from "./auth";
+import { BrandMark } from "./BrandMark";
 import { BACKUP_WARNING_EVENT, RemoteUser, serverStorageMode } from "./remote";
 import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
@@ -377,7 +378,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           }}
         >
           <span className="brand-symbol">
-            <img src="/assets/budg-logo.png" alt="" />
+            <BrandMark />
           </span>
           <b>BUDG</b>
         </a>
