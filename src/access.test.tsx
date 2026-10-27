@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BudgetGuide } from "./guide";
+import { MonthClosing } from "./MonthClosing";
 import { Actions, CommonPot, Dashboard, Envelopes, Members, Transactions } from "./screens";
-import { configureHousehold, initialState, saveExpense, saveLine, savePayment } from "./store";
+import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment } from "./store";
 
 const actions: Actions = {
   expense: vi.fn(), payment: vi.fn(), line: vi.fn(), removeLine: vi.fn(),
@@ -15,14 +16,26 @@ state = savePayment(state, { id: "payment-1", memberId: "jean", amountCents: 100
 state = saveExpense(state, { id: "expense-1", lineId: "courses", amountCents: 1000, date: "2026-08-02", description: "Achat réel" }, false);
 
 describe("interface en lecture seule", () => {
-  it("conserve la navigation du tableau de bord et masque les versements, dépenses et clôtures", () => {
-    const html = renderToStaticMarkup(<Dashboard state={state} actions={actions} openBudget={vi.fn()} readOnly />);
-    expect(html).toContain("Voir les enveloppes");
+  it("présente un bilan consultatif sans actions de versement, dépense ou clôture", () => {
+    const html = renderToStaticMarkup(<Dashboard state={state} />);
+    expect(html).toContain("Les dépenses du mois");
+    expect(html).toContain("Total dépensé");
+    expect(html).not.toContain("<button");
     expect(html).not.toMatch(/Enregistrer un versement|Ajouter une dépense|Saisir un paiement|Vérifier et clôturer|Préparer le mois suivant/);
     expect(html).not.toContain("Confirmer : plus rien");
-    const editor = renderToStaticMarkup(<Dashboard state={state} actions={actions} openBudget={vi.fn()} />);
-    expect(editor).toContain("Enregistrer un versement");
-    expect(editor).toContain("Vérifier et clôturer");
+  });
+  it("conserve la clôture et le mois suivant dans les enveloppes uniquement pour l’éditeur", () => {
+    const active = renderToStaticMarkup(<MonthClosing budget={state.budget} actions={actions} />);
+    expect(active).toContain("Vérifier et clôturer");
+    expect(active).not.toContain("Préparer le mois suivant");
+    const closed = closeMonth(savePayment(state, {
+      id: "payment-2", memberId: "miruna", amountCents: 10000, date: "2026-08-03", note: "Contribution reçue",
+    }));
+    const next = renderToStaticMarkup(<MonthClosing budget={closed.budget} actions={actions} />);
+    expect(next).toContain("Préparer le mois suivant");
+    expect(next).not.toContain("Vérifier et clôturer");
+    expect(renderToStaticMarkup(<MonthClosing budget={state.budget} actions={actions} readOnly />)).toBe("");
+    expect(renderToStaticMarkup(<MonthClosing budget={closed.budget} actions={actions} readOnly />)).toBe("");
   });
   it("masque les actions des enveloppes et du pot, sans désactiver les filtres", () => {
     const html = renderToStaticMarkup(<>

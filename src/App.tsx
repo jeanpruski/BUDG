@@ -3,6 +3,7 @@ import { BrandMark } from "./BrandMark";
 import { BACKUP_WARNING_EVENT, RemoteUser, serverStorageMode } from "./remote";
 import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
+import { MonthClosing } from "./MonthClosing";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
 import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
 import {
@@ -424,7 +425,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                 {busy ? "Enregistrement…" : "En local"}
               </span>
             )}
-            {!readOnly && b.status === "ACTIVE" && state.configured && (
+            {!readOnly && view !== "dashboard" && b.status === "ACTIVE" && state.configured && (
               <button
                 className="primary"
                 disabled={busy || !b.lines.length}
@@ -534,7 +535,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             </section>
           ) : (
             <>
-              {(view === "dashboard" || view === "budget") && (
+              {view === "budget" && b.status === "ACTIVE" && (
                 <BudgetGuide
                   state={state}
                   actions={actions}
@@ -543,14 +544,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                   payments={() => go("payments")}
                 />
               )}
-              {view === "dashboard" && (
-                <Dashboard
-                  state={state}
-                  actions={actions}
-                  readOnly={readOnly}
-                  openBudget={() => go("budget")}
-                />
-              )}
+              {view === "dashboard" && <Dashboard state={state} />}
               {view === "budget" && (
                 <>
                   <div className="section-head">
@@ -573,6 +567,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     )}
                   </div>
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} />
+                  <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>
               )}
               {view === "expenses" && (

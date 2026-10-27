@@ -6,13 +6,15 @@ La couche visuelle se trouve dans `src/polish.css`, les composants de chargement
 
 ## Logo et icônes
 
-Le logo est un B géométrique ivoire `#f5f1e7` sur un carré vert profond `#17483a`. Sa source unique est [budg-mark.svg](../public/assets/budg-mark.svg), utilisée par `src/BrandMark.tsx` pour la connexion, la navigation sur ordinateur et téléphone et le chargement.
+Le logo reprend la deuxième piste choisie sur la planche de recherche créée avec **imagegen** : un B géométrique dont les découpes et le ruban en S évoquent le `$`. Les masses vert forêt et le pli vert sauge composent un symbole sur fond blanc `#ffffff`. Le dessin retenu est retranscrit en courbes vectorielles, sans dépendance à une police. Sa source unique est [budg-mark.svg](../public/assets/budg-mark.svg), utilisée par `src/BrandMark.tsx` pour la connexion, la navigation sur ordinateur et téléphone et le chargement.
 
-`npm run icons` régénère toutes les déclinaisons : le PNG de compatibilité, le SVG historique, le favicon ICO avec sept tailles de 16 à 256 pixels, l’icône Apple 180 × 180 et les icônes du manifeste 192/512. La compilation les régénère aussi automatiquement. Les fichiers sont versionnés et inclus par Vite dans le site compilé. Les icônes d’écran d’accueil ont un fond opaque carré ; le téléphone applique son masque. Le B reste dans la zone centrale sûre de l’icône maskable.
+`npm run icons` régénère toutes les déclinaisons : le PNG de compatibilité, le SVG historique, le favicon ICO avec sept tailles de 16 à 256 pixels, l’icône Apple 180 × 180 et les icônes du manifeste 192/512. La compilation les régénère aussi automatiquement. Les fichiers sont versionnés et inclus par Vite dans le site compilé. Les icônes d’écran d’accueil ont un fond opaque carré ; le téléphone applique son masque. Le symbole reste dans la zone centrale sûre de l’icône maskable.
 
 Safari utilise [apple-touch-icon.png](../public/apple-touch-icon.png) pour le raccourci iPhone. Après le déploiement, ajouter BUDG depuis **Safari → Partager → Sur l’écran d’accueil**. Pour un raccourci qui conserve l’ancien logo, le recréer depuis Safari. Voir la [documentation Apple](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html).
 
 ## Comportements
+
+La vue d’ensemble (`src/Overview.tsx`) présente un graphique des dépenses du mois regroupées en appartement, vie quotidienne et achats du pot commun, accompagné du solde du compte et des versements attendus. Les montants représentent les paiements enregistrés ; les réserves apparaissent lorsqu’elles sont dépensées. Les opérations détaillées restent dans leurs onglets. La clôture et le passage au mois suivant sont accessibles dans **Enveloppes**.
 
 - Un écran avec squelette animé accompagne le chargement réel du stockage.
 - Les boutons de sauvegarde et la lecture des copies affichent un indicateur pendant l’opération, sans délai artificiel.
@@ -27,7 +29,7 @@ Créées avec l’outil **imagegen intégré**, sans CLI ni clé API. Les fichie
 - [Accueil — budg-home-illustration.png](../public/assets/budg-home-illustration.png)
 - [Pot commun — budg-savings-illustration.png](../public/assets/budg-savings-illustration.png)
 
-Les illustrations restent disponibles ; le symbole de marque et ses déclinaisons sont désormais générés depuis le B vectoriel ci-dessus.
+Les illustrations restent disponibles ; le symbole de marque et ses déclinaisons sont désormais générés depuis le `$` vectoriel ci-dessus.
 
 ### Prompt final — accueil
 
