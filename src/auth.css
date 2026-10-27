@@ -1,6 +1,6 @@
 .auth-stage { min-height:100dvh; display:grid; place-items:center; padding:28px 18px; }
 .auth-card { width:100%; max-width:460px; padding:34px; }
-.auth-brand { display:flex; align-items:center; justify-content:center; gap:10px; font-size:29px; margin-bottom:30px; }
+.auth-brand { display:flex; align-items:center; justify-content:center; gap:10px; font-size:29px; margin-bottom:2rem; }
 .auth-card .eyebrow { display:flex; align-items:center; gap:8px; }
 .auth-card h1 { font-size:25px; line-height:1.3; margin-bottom:14px; }
 .auth-card form { margin-top:25px; }
