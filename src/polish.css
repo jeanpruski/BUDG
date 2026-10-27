@@ -56,8 +56,12 @@ dd,
 .metric-value {
   font-variant-numeric: tabular-nums;
 }
+.app-shell {
+  --sidebar-width: 238px;
+  padding-left: var(--sidebar-width);
+}
 .app-shell > aside {
-  width: 238px;
+  width: var(--sidebar-width);
   padding: 33px 20px 25px;
   background:
     radial-gradient(ellipse at 0% 0%, #315b452e, transparent 55%), #193e32;
@@ -185,7 +189,9 @@ nav button.active::after {
   letter-spacing: 0.15px;
 }
 .app-shell > main {
-  margin-left: 238px;
+  width: 100%;
+  min-width: 0;
+  margin: 0 auto;
   padding: 32px 3vw 65px;
   max-width: 1680px;
 }
@@ -1419,8 +1425,10 @@ dialog::backdrop {
   }
 }
 @media (max-width: 1150px) {
+  .app-shell {
+    --sidebar-width: 205px;
+  }
   .app-shell > aside {
-    width: 205px;
     padding-left: 15px;
     padding-right: 15px;
   }
@@ -1428,7 +1436,6 @@ dialog::backdrop {
     left: -15px;
   }
   .app-shell > main {
-    margin-left: 205px;
     padding: 28px 24px 55px;
   }
   .intro-card {
@@ -1494,6 +1501,9 @@ dialog::backdrop {
   }
 }
 @media (max-width: 760px) {
+  .app-shell {
+    --sidebar-width: 0px;
+  }
   body {
     background: #f7f8f3;
   }
@@ -1545,7 +1555,6 @@ dialog::backdrop {
     display: none;
   }
   .app-shell > main {
-    margin-left: 0;
     padding: 23px 17px 40px;
   }
   .app-shell main > header {

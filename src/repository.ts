@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { AppState, validateState } from "./domain";
+import { remoteRepository, serverStorageMode } from "./remote";
 
 // The UI depends only on this contract: a shared backend can replace the local adapters.
 export interface BudgetRepository {
@@ -156,8 +157,12 @@ const desktopRepository: BudgetRepository = {
     });
   },
 };
-export const repository = isTauri() ? desktopRepository : browserRepository;
-export const storageLabel = isTauri()
+export const repository = serverStorageMode
+  ? remoteRepository
+  : isTauri() ? desktopRepository : browserRepository;
+export const storageLabel = serverStorageMode
+  ? "Serveur PostgreSQL"
+  : isTauri()
   ? "Fichier local sur cet ordinateur"
   : "Stockage local de ce navigateur";
 export function exportBackup(state: AppState) {

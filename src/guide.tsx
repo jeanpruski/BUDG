@@ -16,11 +16,13 @@ export function BudgetGuide({
   actions,
   prepare,
   payments,
+  readOnly = false,
 }: {
   state: AppState;
   actions: Actions;
   prepare: () => void;
   payments: () => void;
+  readOnly?: boolean;
 }) {
   const b = state.budget;
   const summary = budgetSummary(b);
@@ -82,7 +84,7 @@ export function BudgetGuide({
                   : "Avant les courses, regardez le disponible financé. Après les courses, saisissez le ticket : l’enveloppe diminue automatiquement. Aucune dépense à inventer pour avancer !"}
           </p>
         </div>
-        <button
+        {!readOnly && <button
           className="primary"
           onClick={
             closed
@@ -102,7 +104,7 @@ export function BudgetGuide({
                 ? "Voir les contributions"
                 : "Noter un achat"}
           <ArrowRight size={16} />
-        </button>
+        </button>}
       </div>
       <details className="guide-help">
         <summary>Comment ça marche ? Un exemple et mes repères</summary>
@@ -136,7 +138,7 @@ export function BudgetGuide({
           Ces chiffres sont un exemple, pas des opérations ajoutées à votre
           budget. BUDG ne fait aucun virement bancaire.
         </p>
-        {!closed && (
+        {!readOnly && !closed && (
           <button className="secondary" onClick={prepare}>
             Reprendre le guide des enveloppes
           </button>

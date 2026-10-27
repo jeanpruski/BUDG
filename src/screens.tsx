@@ -45,10 +45,12 @@ export type Actions = {
 export function Dashboard({
   state,
   actions,
+  readOnly = false,
   openBudget,
 }: {
   state: AppState;
   actions: Actions;
+  readOnly?: boolean;
   openBudget: () => void;
 }) {
   const b = state.budget,
@@ -154,7 +156,7 @@ export function Dashboard({
           </p>
         </div>
       </div>
-      <Members budget={b} actions={actions} />
+      <Members budget={b} actions={actions} readOnly={readOnly} />
       {!b.lines.some((l) => l.plannedCents > 0) && (
         <div className="notice">
           <p>
@@ -162,7 +164,7 @@ export function Dashboard({
             factures et achats ne sont jamais créés automatiquement.
           </p>
           <button className="primary" onClick={openBudget}>
-            Préparer le budget
+            {readOnly ? "Voir les enveloppes" : "Préparer le budget"}
           </button>
         </div>
       )}
@@ -175,11 +177,11 @@ export function Dashboard({
           </p>
         </div>
         <button className="secondary" onClick={openBudget}>
-          Gérer les enveloppes
+          {readOnly ? "Voir les enveloppes" : "Gérer les enveloppes"}
         </button>
       </div>
-      <Envelopes budget={b} actions={actions} compact />
-      <div className="panel closing-panel">
+      <Envelopes budget={b} actions={actions} compact readOnly={readOnly} />
+      {!readOnly && <div className="panel closing-panel">
         <div>
           <h2>{b.status === "CLOSED" ? "Mois clôturé" : "Terminer le mois"}</h2>
           <p>
@@ -196,16 +198,18 @@ export function Dashboard({
             ? "Préparer le mois suivant"
             : "Vérifier et clôturer"}
         </button>
-      </div>
+      </div>}
     </>
   );
 }
 export function Members({
   budget,
   actions,
+  readOnly = false,
 }: {
   budget: Budget;
   actions: Actions;
+  readOnly?: boolean;
 }) {
   const s = budgetSummary(budget);
   return (
@@ -252,7 +256,7 @@ export function Members({
               {euro(m.expected)}
             </small>
           </div>
-          {budget.status === "ACTIVE" && (
+          {!readOnly && budget.status === "ACTIVE" && (
             <button
               className="secondary full"
               onClick={() => actions.payment(m.id)}
@@ -268,10 +272,12 @@ export function Members({
 export function Envelopes({
   budget,
   actions,
+  readOnly = false,
   compact = false,
 }: {
   budget: Budget;
   actions: Actions;
+  readOnly?: boolean;
   compact?: boolean;
 }) {
   const summary = budgetSummary(budget),
@@ -417,7 +423,7 @@ export function Envelopes({
                           .join(" · ")}
                       </p>
                     )}
-                    {!closed && (
+                    {!readOnly && !closed && (
                       <div className="actions">
                         <button
                           className="secondary"
@@ -448,7 +454,7 @@ export function Envelopes({
                         )}
                       </div>
                     )}
-                    {!compact && !closed && l.kind === "FIXED" && (
+                    {!readOnly && !compact && !closed && l.kind === "FIXED" && (
                       <button
                         className="text-button"
                         onClick={() => actions.settle(l.id, !l.settled)}
@@ -470,10 +476,12 @@ export function Envelopes({
 export function Transactions({
   budget,
   actions,
+  readOnly = false,
   mode,
 }: {
   budget: Budget;
   actions: Actions;
+  readOnly?: boolean;
   mode: "expenses" | "payments";
 }) {
   const [search, setSearch] = useState("");
@@ -499,7 +507,7 @@ export function Transactions({
             {euro(rows.reduce((s, e) => s + e.amountCents, 0))}
           </p>
         </div>
-        {!closed && (
+        {!readOnly && !closed && (
           <button
             className="primary"
             onClick={() => (expenses ? actions.expense() : actions.payment())}
@@ -566,7 +574,7 @@ export function Transactions({
               {expenses ? "−" : "+"}
               {euro(e.amountCents)}
             </b>
-            {!closed && (
+            {!readOnly && !closed && (
               <div className="actions">
                 <button
                   className="icon-button"
@@ -601,9 +609,11 @@ export function Transactions({
 export function CommonPot({
   state,
   actions,
+  readOnly = false,
 }: {
   state: AppState;
   actions: Actions;
+  readOnly?: boolean;
 }) {
   const pot = potSummary(state);
   const entries = [
@@ -688,14 +698,14 @@ export function CommonPot({
               surplus ne crée aucun virement bancaire.
             </p>
           </div>
-          <button
+          {!readOnly && <button
             className="primary"
             disabled={pot.availableCents <= 0}
             onClick={() => actions.potExpense()}
           >
             <Plus size={17} />
             Utiliser le pot commun
-          </button>
+          </button>}
         </div>
         {!entries.length && (
           <Empty>
@@ -726,7 +736,7 @@ export function CommonPot({
                 {entry.amount >= 0 ? "+" : "−"}
                 {euro(Math.abs(entry.amount))}
               </b>
-              {entry.expense && (
+              {!readOnly && entry.expense && (
                 <div className="actions">
                   <button
                     className="icon-button"

@@ -8,20 +8,31 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "tauri": "tauri",
-    "start": "node scripts/start.mjs"
+    "start": "node scripts/start.mjs",
+    "build:server": "tsc -p tsconfig.server.json && node scripts/build-server.mjs",
+    "build:online": "node scripts/build-online.mjs",
+    "serve": "node app.cjs",
+    "server:cli": "node server-dist/cli.cjs",
+    "test:server": "vitest run server"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
+    "express": "^5.3.0",
     "lucide-react": "^0.468.0",
+    "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.12",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "vitest": "^2.1.8"

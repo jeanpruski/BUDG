@@ -1,3 +1,5 @@
+import { AuthenticationGate, SessionControls } from "./auth";
+import { BACKUP_WARNING_EVENT, RemoteUser, serverStorageMode } from "./remote";
 import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
 import { EnvelopeSuggestions } from "./suggestions";
@@ -108,6 +110,14 @@ const errorMessage = (error: unknown) =>
     : String(error);
 
 export default function App() {
+  return serverStorageMode ? (
+    <AuthenticationGate>
+      {(user, logout) => <BudgetApp key={`${user.id}:${user.role}`} user={user} logout={logout} />}
+    </AuthenticationGate>
+  ) : <BudgetApp />;
+}
+function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void }) {
+  const readOnly = user?.role === "viewer";
   const [state, setState] = useState<AppState | null>(null);
   const current = useRef<AppState | null>(null),
     locked = useRef(false);
@@ -121,6 +131,15 @@ export default function App() {
     null,
   );
   const [backups, setBackups] = useState<Backup[]>([]);
+  const [backupWarnings, setBackupWarnings] = useState<string[]>([]);
+  useEffect(() => {
+    if (!serverStorageMode) return;
+    const onBackupWarning = (event: Event) => {
+      setBackupWarnings((event as CustomEvent<string[]>).detail);
+    };
+    window.addEventListener(BACKUP_WARNING_EVENT, onBackupWarning);
+    return () => window.removeEventListener(BACKUP_WARNING_EVENT, onBackupWarning);
+  }, []);
   useEffect(() => {
     let active = true;
     repository
@@ -142,10 +161,42 @@ export default function App() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    if (!readOnly) return;
+    let active = true;
+    let refreshing = false;
+    async function refresh() {
+      if (refreshing || locked.current) return;
+      refreshing = true;
+      try {
+        const saved = await repository.load();
+        if (active) {
+          const next = saved ?? initialState();
+          current.current = next;
+          setState(next);
+          setError("");
+        }
+      } catch (e) {
+        if (active) setError(errorMessage(e));
+      } finally { refreshing = false; }
+    }
+    const onFocus = () => { void refresh(); };
+    const timer = window.setInterval(onFocus, 30_000);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [readOnly]);
   async function commit(
     change: (s: AppState) => AppState,
     message = "Modification enregistrée",
   ) {
+    if (readOnly) {
+      setError("Votre compte est en lecture seule. Seul un compte éditeur peut modifier le budget.");
+      return false;
+    }
     if (locked.current || !current.current) return false;
     locked.current = true;
     setBusy(true);
@@ -183,6 +234,10 @@ export default function App() {
     }
   }
   function open(next: Dialog) {
+    if (readOnly) {
+      setError("Votre compte est en lecture seule.");
+      return;
+    }
     setError("");
     setDialog(next);
   }
@@ -242,7 +297,7 @@ export default function App() {
       ),
   };
   async function readImport(file?: File) {
-    if (!file || loadingTask) return;
+    if (readOnly || !file || loadingTask) return;
     setLoadingTask("import");
     try {
       if (file.size > 10_000_000)
@@ -271,7 +326,15 @@ export default function App() {
     }
   }
   if (loading) return <LoadingScreen />;
-  if (!state) return <Recovery error={error} />;
+  if (!state) return serverStorageMode ? (
+    <main className="auth-stage"><section className="panel auth-card">
+      {user && logout && <SessionControls user={user} signOut={logout} />}
+      <h1>Budget indisponible</h1>
+      <p className="alert error" role="alert">{error}</p>
+      <p>Les données du serveur n’ont pas été remplacées.</p>
+      <button className="primary" onClick={() => window.location.reload()}>Réessayer</button>
+    </section></main>
+  ) : <Recovery error={error} />;
   const b = state.budget,
     summary = budgetSummary(b);
   const closeDialog = () => {
@@ -340,7 +403,7 @@ export default function App() {
         <div className="sidebar-footer">
           <span className="privacy-label">
             <LockKeyhole size={12} />
-            Local · vos données restent ici
+            {serverStorageMode ? "Serveur PostgreSQL" : "Local · vos données restent ici"}
           </span>
           <small>{state.members.map((m) => m.name).join(" & ")}</small>
         </div>
@@ -357,11 +420,13 @@ export default function App() {
             <h1>{navigation.find((n) => n[0] === view)?.[1]}</h1>
           </div>
           <div className="header-actions">
-            <span className="saved">
-              {busy ? <Spinner small /> : <CheckCircle2 size={15} />}
-              {busy ? "Enregistrement…" : "En local"}
-            </span>
-            {b.status === "ACTIVE" && state.configured && (
+            {user && logout ? <SessionControls user={user} signOut={logout} /> : (
+              <span className="saved">
+                {busy ? <Spinner small /> : <CheckCircle2 size={15} />}
+                {busy ? "Enregistrement…" : "En local"}
+              </span>
+            )}
+            {!readOnly && b.status === "ACTIVE" && state.configured && (
               <button
                 className="primary"
                 disabled={busy || !b.lines.length}
@@ -373,10 +438,18 @@ export default function App() {
             )}
           </div>
         </header>
+        {readOnly && <p className="remote-viewer-notice">Lecture seule · Les changements du budget sont actualisés automatiquement.</p>}
         {!dialog && error && (
           <p className="alert error" role="alert">
             {error}
           </p>
+        )}
+        {backupWarnings.length > 0 && (
+          <div className="alert warning" role="alert">
+            <strong>Le budget a bien été enregistré.</strong>
+            <p>Une archive mensuelle reste en attente de sauvegarde ou de vérification.</p>
+            <ul>{backupWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+          </div>
         )}
         {notice && <Toast message={notice} dismiss={() => setNotice("")} />}
         {loadingTask === "import" && (
@@ -391,7 +464,9 @@ export default function App() {
           aria-busy={busy}
           key={view}
         >
-          {!state.configured ? (
+          {!state.configured && readOnly ? (
+            <section className="panel remote-waiting"><h2>Votre budget sera bientôt disponible</h2><p>Un compte éditeur doit d’abord préparer le foyer et les enveloppes. Cette page se mettra à jour automatiquement.</p></section>
+          ) : !state.configured ? (
             <section className="panel onboarding">
               <div className="onboarding-story">
                 <span className="eyebrow">VOTRE NOUVEAU RITUEL À DEUX</span>
@@ -465,6 +540,7 @@ export default function App() {
                 <BudgetGuide
                   state={state}
                   actions={actions}
+                  readOnly={readOnly}
                   prepare={() => open({ type: "coach" })}
                   payments={() => go("payments")}
                 />
@@ -473,6 +549,7 @@ export default function App() {
                 <Dashboard
                   state={state}
                   actions={actions}
+                  readOnly={readOnly}
                   openBudget={() => go("budget")}
                 />
               )}
@@ -487,7 +564,7 @@ export default function App() {
                         versement.
                       </p>
                     </div>
-                    {b.status === "ACTIVE" && (
+                    {!readOnly && b.status === "ACTIVE" && (
                       <button
                         className="primary"
                         onClick={() => actions.line()}
@@ -497,8 +574,8 @@ export default function App() {
                       </button>
                     )}
                   </div>
-                  <Envelopes budget={b} actions={actions} />
-                  {b.status === "ACTIVE" && (
+                  <Envelopes budget={b} actions={actions} readOnly={readOnly} />
+                  {!readOnly && b.status === "ACTIVE" && (
                     <EnvelopeSuggestions
                       lines={b.lines}
                       choose={(template) => open({ type: "line", template })}
@@ -507,15 +584,15 @@ export default function App() {
                 </>
               )}
               {view === "expenses" && (
-                <Transactions budget={b} actions={actions} mode="expenses" />
+                <Transactions budget={b} actions={actions} mode="expenses" readOnly={readOnly} />
               )}
               {view === "payments" && (
                 <>
-                  <Members budget={b} actions={actions} />
-                  <Transactions budget={b} actions={actions} mode="payments" />
+                  <Members budget={b} actions={actions} readOnly={readOnly} />
+                  <Transactions budget={b} actions={actions} mode="payments" readOnly={readOnly} />
                 </>
               )}
-              {view === "pot" && <CommonPot state={state} actions={actions} />}
+              {view === "pot" && <CommonPot state={state} actions={actions} readOnly={readOnly} />}
               {view === "history" && <History state={state} />}
               {view === "settings" && (
                 <div className="settings-layout">
@@ -525,6 +602,9 @@ export default function App() {
                       Le mois d’effet conserve les anciennes répartitions. Une
                       modification ne change jamais un mois clôturé.
                     </p>
+                    {readOnly ? (
+                      <dl>{state.members.map((member) => <div key={member.id}><dt>{member.name}</dt><dd>{euro(member.incomeCents)}</dd></div>)}</dl>
+                    ) : (
                     <HouseholdForm
                       state={state}
                       busy={busy}
@@ -545,6 +625,7 @@ export default function App() {
                         })
                       }
                     />
+                    )}
                     <details>
                       <summary>Historique et changements programmés</summary>
                       {[...state.incomeHistory]
@@ -570,9 +651,9 @@ export default function App() {
                       conservées automatiquement.
                     </p>
                     <p className="hint">
-                      Exportez aussi un fichier dans un dossier sauvegardé : les
-                      copies locales ne protègent pas d’une perte de
-                      l’ordinateur ou d’un effacement du navigateur.
+                      {serverStorageMode
+                        ? "Conservez aussi un export dans un dossier sauvegardé indépendamment du serveur."
+                        : "Exportez aussi un fichier dans un dossier sauvegardé : les copies locales ne protègent pas d’une perte de l’ordinateur ou d’un effacement du navigateur."}
                     </p>
                     <div className="stack">
                       <button
@@ -582,6 +663,7 @@ export default function App() {
                         <Download size={17} />
                         Exporter une sauvegarde
                       </button>
+                      {!readOnly && <>
                       <label className="field">
                         Importer une sauvegarde BUDG
                         <input
@@ -594,6 +676,7 @@ export default function App() {
                           }}
                         />
                       </label>
+                      </>}
                       <button
                         className="secondary"
                         disabled={loadingTask !== null}
@@ -615,6 +698,7 @@ export default function App() {
                               : `Version ${copy.state.revision}`}{" "}
                             · {copy.state.budget.label}
                           </span>
+                          {readOnly ? <button className="text-button" onClick={() => exportBackup(copy.state)}>Exporter</button> : (
                           <button
                             className="text-button"
                             onClick={() =>
@@ -633,9 +717,11 @@ export default function App() {
                           >
                             Restaurer
                           </button>
+                          )}
                         </div>
                       ))}
                     </div>
+                    {!readOnly && <>
                     <hr />
                     <h3>Repartir sans opérations</h3>
                     <p>
@@ -674,6 +760,7 @@ export default function App() {
                     >
                       Tout réinitialiser
                     </button>
+                    </>}
                   </section>
                   <section className="panel usage">
                     <h2>Votre routine en quatre étapes</h2>
@@ -705,7 +792,7 @@ export default function App() {
           )}
         </fieldset>
       </main>
-      {dialog?.type === "line" && (
+      {!readOnly && dialog?.type === "line" && (
         <Modal
           title={dialog.line ? "Modifier l’enveloppe" : "Nouvelle enveloppe"}
           close={closeDialog}
@@ -736,7 +823,7 @@ export default function App() {
           />
         </Modal>
       )}
-      {dialog?.type === "expense" && (
+      {!readOnly && dialog?.type === "expense" && (
         <Modal
           title={
             dialog.expense ? "Modifier la dépense" : "Enregistrer une dépense"
@@ -771,7 +858,7 @@ export default function App() {
           />
         </Modal>
       )}
-      {dialog?.type === "payment" && (
+      {!readOnly && dialog?.type === "payment" && (
         <Modal
           title={
             dialog.payment
@@ -804,7 +891,7 @@ export default function App() {
           />
         </Modal>
       )}
-      {dialog?.type === "coach" && (
+      {!readOnly && dialog?.type === "coach" && (
         <Modal title="Construisons vos enveloppes" close={closeDialog}>
           {activeDialogError}
           <EnvelopeCoach
@@ -827,7 +914,7 @@ export default function App() {
           />
         </Modal>
       )}
-      {dialog?.type === "monthlyIncome" && (
+      {!readOnly && dialog?.type === "monthlyIncome" && (
         <Modal title="Les salaires de ce nouveau mois" close={closeDialog}>
           {activeDialogError}
           <MonthlyIncomeForm
@@ -849,7 +936,7 @@ export default function App() {
           />
         </Modal>
       )}
-      {dialog?.type === "close" && (
+      {!readOnly && dialog?.type === "close" && (
         <Modal title={`Clôturer ${b.label}`} close={closeDialog}>
           {activeDialogError}
           <p>
@@ -905,7 +992,7 @@ export default function App() {
           </Form>
         </Modal>
       )}
-      {dialog?.type === "potExpense" && (
+      {!readOnly && dialog?.type === "potExpense" && (
         <Modal
           title={
             dialog.expense
@@ -964,7 +1051,7 @@ export default function App() {
           </Form>
         </Modal>
       )}
-      {dialog?.type === "confirm" && (
+      {!readOnly && dialog?.type === "confirm" && (
         <Modal title={dialog.title} close={closeDialog}>
           {activeDialogError}
           <p>{dialog.message}</p>

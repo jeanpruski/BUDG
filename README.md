@@ -2,7 +2,27 @@
 
 # BUDG — votre compte commun à deux
 
-Une application locale pour préparer les enveloppes, vérifier les versements de chacun, enregistrer les dépenses et conserver le surplus dans un pot commun.
+Une application pour préparer les enveloppes, vérifier les versements de chacun, enregistrer les dépenses et conserver le surplus dans un pot commun. Elle peut fonctionner sur ce Mac ou sur un serveur PostgreSQL partagé.
+
+## Version en ligne sur PlanetHoster
+
+La version serveur est prévue pour **budg.prjski.com**, avec deux comptes individuels : Jean peut modifier le budget, Miruna dispose d’un accès en lecture seule. Les droits sont vérifiés par le serveur. Le budget est enregistré dans PostgreSQL et reste accessible depuis les différents appareils et profils de navigateur après connexion.
+
+```bash
+npm run build:online
+```
+
+Cette commande construit l’interface en mode serveur et les programmes Node.js dans `server-dist/`. Le serveur de production refuse une interface construite en mode local. Les paramètres de connexion et les secrets restent côté serveur ; le fichier [.env.example](.env.example) présente les variables attendues.
+
+Le [guide d’installation PlanetHoster](docs/planethoster.md) décrit la création de la base et des deux comptes, HTTPS, l’import du budget existant et la tâche Cron. La construction locale ne publie rien et n’installe pas la tâche Cron sur l’hébergement.
+
+- Chaque écriture est validée et protégée contre l’écrasement d’une modification récente. Les 20 versions précédentes du budget sont conservées en base.
+- Les ajouts, corrections et suppressions de dépenses et de versements alimentent un journal attribué à leur auteur. L’API de consultation de ce journal prépare les futurs outils de statistiques ; aucun tableau de statistiques supplémentaire n’est encore proposé.
+- À minuit, heure de Paris, une sauvegarde complète du budget et du journal remplace le fichier privé `current-month.json`.
+- Le premier du mois, une copie du mois précédent est conservée dans `monthly/AAAA-MM.json` avant le remplacement quotidien. Elle reste provisoire et suit les dernières corrections jusqu’à la clôture manuelle, qui la remplace par l’état final du mois. Les modifications des mois suivants ne remplacent pas cette archive finalisée. L’ouverture du mois suivant reste manuelle.
+- Ces sauvegardes de données ne contiennent pas les mots de passe ni les sessions. Le guide distingue la restauration du budget et la reprise après perte de la base, avec conservation du journal des paiements.
+
+Les commandes ci-dessous continuent à lancer la version locale existante. Aucun budget Chrome n’est transféré automatiquement vers PostgreSQL : exportez-le depuis son profil d’origine puis importez-le avec le compte éditeur.
 
 ## Lancer sur ce Mac
 
@@ -56,6 +76,7 @@ Les mois se suivent sans doublon. Le pot cumule les surplus des mois clôturés 
 
 ## Données et sauvegardes
 
+- **Serveur** : PostgreSQL, comptes éditeur/lecteur, journal des opérations et copies privées quotidiennes/mensuelles. Voir le [guide PlanetHoster](docs/planethoster.md).
 - **Navigateur** : IndexedDB, transactions atomiques, conservation des 20 états précédents et contrôle de révision pour éviter qu’une seconde fenêtre écrase une modification récente.
 - **Application Tauri** : fichier `budget-v3.json` dans le dossier de données de l’application (`app.budg.desktop`), écrit par remplacement atomique, contenant les données et 20 versions précédentes. Le support desktop nécessite Rust et les prérequis Tauri pour être compilé.
 - Export et import de fichiers JSON versionnés dans **Paramètres**. L’import contrôle les montants, les dates, les références, les répartitions, les clôtures et la continuité des réserves avant toute modification.
@@ -74,8 +95,9 @@ L’application ne reprend pas les données de démonstration de l’ancien prot
 - `src/repository.ts` : contrat asynchrone de stockage et adaptateurs navigateur/desktop.
 - `src/App.tsx`, `src/screens.tsx`, `src/forms.tsx`, `src/ui.tsx` : navigation, formulaires et composants.
 - `src-tauri/src/lib.rs` : commandes de stockage local desktop.
+- `server/` : serveur HTTP, authentification, stockage PostgreSQL, journal des opérations, sauvegardes et outils d’administration.
 
-Un futur stockage partagé pourra remplacer le dépôt local derrière le même contrat. Il faudra alors ajouter authentification, autorisations du foyer et gestion des conflits côté serveur. Il n’existe actuellement ni compte distant ni synchronisation.
+Le dépôt serveur utilise le même contrat que les dépôts locaux. Les comptes de connexion restent distincts des deux membres utilisés dans les répartitions financières. Cette version gère un budget partagé et un compte de chaque rôle ; elle ne propose pas d’inscription publique.
 
 Le schéma SQLite de l’ancien prototype est conservé comme référence mais n’est pas utilisé.
 
@@ -85,6 +107,8 @@ Le schéma SQLite de l’ancien prototype est conservé comme référence mais n
 npm run dev
 npm test
 npm run build
+npm run build:online  # interface serveur + programmes Node.js
+npm run test:server  # tests PostgreSQL si TEST_DATABASE_URL est défini
 npm run tauri dev  # nécessite Rust et les prérequis Tauri
 ```
 

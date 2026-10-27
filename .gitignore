@@ -3,6 +3,8 @@ node_modules/
 
 # Frontend builds and test output
 dist/
+server-dist/
+release/
 coverage/
 .vite/
 .vitest/
