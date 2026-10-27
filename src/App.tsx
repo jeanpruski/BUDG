@@ -2,7 +2,6 @@ import { AuthenticationGate, SessionControls } from "./auth";
 import { BACKUP_WARNING_EVENT, RemoteUser, serverStorageMode } from "./remote";
 import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
-import { EnvelopeSuggestions } from "./suggestions";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
 import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
 import {
@@ -573,12 +572,6 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     )}
                   </div>
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} />
-                  {!readOnly && b.status === "ACTIVE" && (
-                    <EnvelopeSuggestions
-                      lines={b.lines}
-                      choose={(template) => open({ type: "line", template })}
-                    />
-                  )}
                 </>
               )}
               {view === "expenses" && (
