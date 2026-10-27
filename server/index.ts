@@ -52,6 +52,7 @@ async function consumeLoginAttempt(pool: Pool, key: string, limit: number): Prom
 }
 
 export function createApp(config: ServerConfig, pool: Pool) {
+  const release = process.env.BUDG_RELEASE || null;
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", config.trustProxy);
@@ -65,6 +66,10 @@ export function createApp(config: ServerConfig, pool: Pool) {
   });
   app.use("/api", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   app.use("/api", express.json({ limit: "10mb", strict: true }));
+  app.get("/api/health", route(async (_req, res) => {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", release });
+  }));
   app.use("/api", route(async (req, _res, next) => {
     const token = readCookie(req, cookieName(config));
     if (token) {

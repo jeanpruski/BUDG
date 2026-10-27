@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, verifyOnlineFrontend } from "./index";
 import { readConfig, databaseConfig } from "./config";
 import { hashPassword, verifyPassword } from "./security";
@@ -53,6 +53,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
   let config: ReturnType<typeof readConfig>;
   const schema = `budg_api_${randomUUID().replaceAll("-", "")}`;
   const origin = "https://budg.test";
+  const release = "f".repeat(40);
   const password = "correct-test-password";
   const editor: PublicUser = { id: randomUUID(), email: "editor@example.test", displayName: "Éditeur", role: "editor" };
   const viewer: PublicUser = { id: randomUUID(), email: "viewer@example.test", displayName: "Lecteur", role: "viewer" };
@@ -89,7 +90,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     await writeFile(join(privateDir, ".env"), "PRIVATE_TEST_VALUE");
     config = readConfig({ NODE_ENV: "production", APP_ORIGIN: origin, DATABASE_URL: process.env.TEST_DATABASE_URL,
       BUDG_DIST_DIR: distDir, BUDG_BACKUP_DIR: join(privateDir, "backups") });
-    server = createApp(config, pool).listen(0, "127.0.0.1");
+    const previousRelease = process.env.BUDG_RELEASE;
+    process.env.BUDG_RELEASE = release;
+    try { server = createApp(config, pool).listen(0, "127.0.0.1"); }
+    finally {
+      if (previousRelease === undefined) delete process.env.BUDG_RELEASE;
+      else process.env.BUDG_RELEASE = previousRelease;
+    }
     await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
@@ -108,6 +115,23 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     if (privateDir) await rm(privateDir, { recursive: true, force: true });
   });
 
+  it("vérifie PostgreSQL et expose uniquement la version capturée au démarrage sans connexion ni cache", async () => {
+    const response = await request("/api/health");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(await response.json()).toEqual({ status: "ok", release });
+    expect((await pool.query("SELECT count(*) FROM budg_sessions")).rows[0].count).toBe("0");
+  });
+  it("renvoie une erreur de santé générique si PostgreSQL est indisponible", async () => {
+    const query = vi.spyOn(pool, "query").mockRejectedValueOnce(new Error("PRIVATE_DATABASE_FAILURE"));
+    try {
+      const response = await request("/api/health");
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual({ error: "Le serveur ne peut pas accéder aux données. Réessayez plus tard ; aucune remise à zéro n’a été effectuée." });
+    } finally { query.mockRestore(); }
+  });
   it("refuse les lectures anonymes et crée une session protégée dont seul le hash est stocké", async () => {
     expect((await request("/api/budget")).status).toBe(401);
     expect(await (await request("/api/session")).json()).toEqual({ user: null });

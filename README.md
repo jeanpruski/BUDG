@@ -77,6 +77,7 @@ Les mois se suivent sans doublon. Le pot cumule les surplus des mois clôturés 
 ## Données et sauvegardes
 
 - **Serveur** : PostgreSQL, comptes éditeur/lecteur, journal des opérations et copies privées quotidiennes/mensuelles. Voir le [guide PlanetHoster](docs/planethoster.md).
+- **Mises à jour en ligne** : les push sur `master` lancent les tests puis le déploiement automatique, sans remplacer les données ni les sauvegardes. Voir le [guide du déploiement](docs/ci-deployment.md).
 - **Navigateur** : IndexedDB, transactions atomiques, conservation des 20 états précédents et contrôle de révision pour éviter qu’une seconde fenêtre écrase une modification récente.
 - **Application Tauri** : fichier `budget-v3.json` dans le dossier de données de l’application (`app.budg.desktop`), écrit par remplacement atomique, contenant les données et 20 versions précédentes. Le support desktop nécessite Rust et les prérequis Tauri pour être compilé.
 - Export et import de fichiers JSON versionnés dans **Paramètres**. L’import contrôle les montants, les dates, les références, les répartitions, les clôtures et la continuité des réserves avant toute modification.

@@ -8,6 +8,10 @@ release/
 coverage/
 .vite/
 .vitest/
+__pycache__/
+*.py[cod]
+__pycache__/
+*.py[cod]
 
 # TypeScript generated files
 *.tsbuildinfo
