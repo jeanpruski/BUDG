@@ -1,4 +1,5 @@
 import { HeroArt } from "./visuals";
+import { MobileDetails } from "./MobileDetails";
 import { useState } from "react";
 import {
   ArrowDownLeft,
@@ -189,7 +190,7 @@ export function Envelopes({
                                 : "Facture à régler"}
                       </span>
                     </div>
-                    <p className="hint">
+                    <p className="hint envelope-allocation">
                       {allocationLabel(l)}
                       {l.allocationType === "CUSTOM" &&
                         l.customPercentages
@@ -199,9 +200,6 @@ export function Envelopes({
                           )
                           .join("")}
                     </p>
-                    {l.amountPlan && (l.amountPlan.changes.some((entry) => entry.fromMonth > budget.id) || l.amountPlan.exceptions.some((entry) => entry.month >= budget.id)) && (
-                      <p className="hint">Des montants spécifiques sont programmés par mois.</p>
-                    )}
                     <div className="envelope-amount">
                       <strong className={l.available < 0 ? "text-red" : ""}>
                         {euro(l.available)}
@@ -217,8 +215,17 @@ export function Envelopes({
                       value={Math.min(l.spent, l.capacity || 1)}
                       max={l.capacity || 1}
                     />
+                    <div className="envelope-mobile-overview">
+                      <dl>
+                        <div><dt>Prévu ce mois</dt><dd>{euro(l.plannedCents)}</dd></div>
+                        <div><dt>Dépensé</dt><dd>{euro(l.spent)}</dd></div>
+                      </dl>
+                      {l.funded < l.capacity && <p className="text-amber">À financer : {euro(l.capacity - l.funded)}</p>}
+                      {l.remaining < 0 && <p className="text-red">Dépassement du prévu : {euro(-l.remaining)}</p>}
+                    </div>
+                    <MobileDetails label={readOnly || closed ? "Détails" : "Détails et actions"} name={l.name}>
                     <dl className="line-numbers">
-                      <div>
+                      <div className="envelope-planned-row">
                         <dt>Prévu ce mois</dt>
                         <dd>{euro(l.plannedCents)}</dd>
                       </div>
@@ -232,7 +239,7 @@ export function Envelopes({
                         <dt>Financé</dt>
                         <dd>{euro(l.funded)}</dd>
                       </div>
-                      <div>
+                      <div className="envelope-spent-row">
                         <dt>Dépensé</dt>
                         <dd>{euro(l.spent)}</dd>
                       </div>
@@ -246,10 +253,13 @@ export function Envelopes({
                       </div>
                     </dl>
                     {l.funded < l.capacity && (
-                      <p className="hint text-amber">
+                      <p className="hint text-amber envelope-funding-hint">
                         Il manque {euro(l.capacity - l.funded)} pour financer
                         cette enveloppe.
                       </p>
+                    )}
+                    {l.amountPlan && (l.amountPlan.changes.some((entry) => entry.fromMonth > budget.id) || l.amountPlan.exceptions.some((entry) => entry.month >= budget.id)) && (
+                      <p className="hint">Des montants spécifiques sont programmés par mois.</p>
                     )}
                     {l.kind === "RESERVE" && (
                       <p className="hint">
@@ -314,6 +324,7 @@ export function Envelopes({
                           : "Confirmer : plus rien à payer ce mois"}
                       </button>
                     )}
+                    </MobileDetails>
                   </article>
                 );
               })}

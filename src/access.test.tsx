@@ -57,7 +57,7 @@ describe("interface en lecture seule", () => {
   it("garde les explications du guide et supprime ses invitations à modifier", () => {
     const html = renderToStaticMarkup(<BudgetGuide state={state} actions={actions} prepare={vi.fn()} payments={vi.fn()} readOnly />);
     expect(html).toContain("Comment ça marche");
-    expect(html).not.toContain("<button");
+    expect(html).not.toMatch(/Voir les contributions|Me guider pas à pas|Reprendre le guide des enveloppes/);
     expect(html).toContain("guide-lessons");
   });
   it("reconnaît un mois à zéro préparé sans redemander de construire ou financer les enveloppes", () => {

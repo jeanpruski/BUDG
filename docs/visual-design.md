@@ -20,6 +20,8 @@ Dans **Versements**, « Salaires du mois » affiche les revenus du mois consult�
 
 Dans **Enveloppes**, un premier mois uniquement préparatoire peut être remplacé par le premier mois réellement suivi, sans statistique ni mouvement financier pour la préparation. **Montants par mois** permet de programmer des exceptions mensuelles et des changements durables, avec aperçu et retrait des programmations. Les factures à zéro affichent « Rien à financer ce mois ». Voir [le guide de démarrage et des mensualités](monthly-planning.md).
 
+Sur téléphone, les enveloppes présentent le disponible financé, le prévu, les dépenses et les alertes de financement ou de dépassement. « Détails et actions » déplie les autres chiffres, les explications et les commandes ; le compte lecteur peut consulter les détails sans action financière. Le guide du mois se résume à son état et à une ouverture des étapes et conseils. Les cartes de versements, les marges et le graphique sont resserrés. Les détails restent affichés sur ordinateur. Les adaptations se trouvent dans `src/mobile.css`, `src/mobile-members.css` et `src/MobileDetails.tsx` ; elles conservent les règles de calcul et les données.
+
 - Un écran avec squelette animé accompagne le chargement réel du stockage.
 - Les boutons de sauvegarde et la lecture des copies affichent un indicateur pendant l’opération, sans délai artificiel.
 - Les vues, fenêtres et cartes apparaissent progressivement ; les montants restent exacts et ne passent pas par des valeurs intermédiaires fictives.

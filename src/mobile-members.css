@@ -1,0 +1,171 @@
+@media (max-width: 760px) {
+  .members-grid {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .members-grid .member-card {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .member-card .section-head {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .member-card .person-name {
+    min-width: 0;
+    gap: 9px;
+  }
+
+  .member-card .person-name h3 {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .member-card .avatar {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    box-shadow: none;
+  }
+
+  .member-card .badge {
+    flex-shrink: 0;
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .member-card .member-progress {
+    margin: 0 0 6px;
+  }
+
+  .member-card dl > div {
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+
+  .member-card dd {
+    flex-shrink: 0;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .member-card .personal-remainder {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 10px;
+    margin: 9px 0 10px;
+    border-radius: 8px;
+  }
+
+  .member-card .personal-remainder > span {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .member-card .personal-remainder > strong {
+    margin: 0;
+    font-size: 19px;
+    letter-spacing: -0.4px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .member-card .personal-remainder > small {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .member-card > .secondary.full {
+    min-height: 40px;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .monthly-income-panel {
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .monthly-income-panel .monthly-income-heading {
+    gap: 4px 10px;
+    margin-bottom: 12px;
+  }
+
+  .monthly-income-panel .monthly-income-heading h2 {
+    font-size: 15px;
+  }
+
+  .monthly-income-panel .monthly-income-heading > span {
+    font-size: 11px;
+  }
+
+  .monthly-income-panel .monthly-income-amounts {
+    gap: 10px 16px;
+  }
+
+  .monthly-income-panel .monthly-income-amounts dt {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .monthly-income-panel .monthly-income-amounts dt span {
+    display: inline;
+    margin: 0;
+    font-size: 11px;
+  }
+
+  .monthly-income-panel .monthly-income-amounts dd {
+    margin-top: 4px;
+    font-size: 20px;
+  }
+
+  .monthly-income-panel .monthly-income-explanation {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .monthly-income-panel .monthly-income-prepared {
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 8px;
+  }
+
+  .monthly-income-panel .monthly-income-prepared p {
+    margin: 5px 0;
+    line-height: 1.45;
+  }
+
+  .monthly-income-panel .monthly-income-prepared small {
+    display: block;
+    line-height: 1.45;
+  }
+
+  .monthly-income-panel .monthly-income-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .monthly-income-panel .monthly-income-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .monthly-income-panel .monthly-income-actions button:only-child {
+    grid-column: 1 / -1;
+  }
+}

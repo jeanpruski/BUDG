@@ -560,7 +560,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               {view === "dashboard" && <Dashboard state={state} />}
               {view === "budget" && (
                 <>
-                  <div className="section-head">
+                  <div className="section-head budget-heading">
                     <div>
                       <h2>Votre budget mensuel</h2>
                       <p>

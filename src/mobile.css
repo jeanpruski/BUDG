@@ -1,0 +1,477 @@
+/* The desktop keeps the full detail; phones start with a compact summary. */
+.mobile-details,
+.mobile-details-content {
+  display: contents;
+}
+.mobile-details-toggle,
+.envelope-mobile-overview,
+.guide-mobile-status {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .app-shell > main {
+    padding: 16px 12px 28px;
+  }
+  .app-shell main > header {
+    min-height: 0;
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+  .header-actions {
+    gap: 6px;
+  }
+  .session-controls > span {
+    display: none;
+  }
+  .session-controls .secondary {
+    width: 40px;
+    min-width: 40px;
+    padding: 8px;
+    font-size: 0;
+  }
+  .session-controls .secondary svg {
+    width: 18px;
+    height: 18px;
+  }
+  .header-actions .primary {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .mobile-topbar {
+    padding: 8px 14px;
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+  .mobile-brand img {
+    width: 30px;
+    height: 30px;
+  }
+  .mobile-brand {
+    font-size: 21px;
+    min-height: 42px;
+  }
+  .mobile-menu-toggle {
+    width: 42px;
+    height: 42px;
+  }
+  .panel {
+    padding: 14px;
+    border-radius: 12px;
+  }
+  .section-head {
+    margin: 18px 0 12px;
+    gap: 10px;
+  }
+  .section-head p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .section-head > button,
+  .primary,
+  .secondary,
+  .icon-button,
+  .text-button {
+    min-height: 40px;
+  }
+  .budget-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .budget-heading > div {
+    display: contents;
+  }
+  .budget-heading h2 {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+  .budget-heading > button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .budget-heading p {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  .monthly-income-panel .monthly-income-amounts dd {
+    overflow-wrap: anywhere;
+  }
+  .icon-button {
+    min-width: 40px;
+  }
+  .field input,
+  .field select,
+  .filters input,
+  .filters select {
+    font-size: 16px;
+    min-height: 42px;
+  }
+  .remote-viewer-notice {
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .mobile-details,
+  .mobile-details-content {
+    display: block;
+  }
+  .mobile-details:not(.is-expanded) > .mobile-details-content {
+    display: none;
+  }
+  .mobile-details-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 0;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .mobile-details.is-expanded > .mobile-details-toggle svg {
+    transform: rotate(180deg);
+  }
+  .mobile-details-content .hint {
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 9px 0;
+  }
+  .budget-guide {
+    padding: 14px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+  }
+  .budget-guide > .section-head {
+    margin: 0 0 6px;
+    align-items: center;
+  }
+  .budget-guide .eyebrow {
+    display: none;
+  }
+  .budget-guide h2 {
+    font-size: 15px;
+    margin: 0;
+    line-height: 1.35;
+  }
+  .guide-mobile-status {
+    display: block;
+    margin: 0 0 4px;
+    color: #52664f;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .budget-guide .mobile-details-toggle {
+    min-height: 40px;
+    padding-bottom: 0;
+  }
+  .guide-steps {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+    margin: 12px 0;
+  }
+  .guide-steps li {
+    font-size: 12px;
+  }
+  .guide-steps li > span {
+    width: 25px;
+    height: 25px;
+  }
+  .guide-next {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 12px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .guide-next p {
+    margin: 6px 0;
+    font-size: 12px;
+  }
+  .guide-help {
+    margin-top: 12px;
+    padding-top: 12px;
+    font-size: 12px;
+  }
+  .guide-help > summary {
+    min-height: 40px;
+    line-height: 1.5;
+  }
+  .guide-lessons {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .envelopes {
+    gap: 10px;
+  }
+  .group-title {
+    margin: 18px 0 10px;
+  }
+  .group-title > span {
+    display: none;
+  }
+  .envelope {
+    padding: 14px 14px 4px;
+    min-width: 0;
+  }
+  .envelope .section-head {
+    margin: 0 0 4px;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .envelope-title {
+    min-width: 0;
+    gap: 8px;
+  }
+  .envelope-title h3 {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    font-size: 14px !important;
+  }
+  .envelope-symbol {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+  .envelope .badge {
+    max-width: 45%;
+    padding: 4px 6px;
+    white-space: normal;
+    text-align: right;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .envelope .envelope-allocation {
+    margin: 2px 0 8px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .envelope-amount strong {
+    font-size: 23px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .envelope-amount span {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .envelope progress {
+    height: 4px;
+    margin: 10px 0 8px;
+  }
+  .envelope-mobile-overview {
+    display: block;
+  }
+  .envelope-mobile-overview dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .envelope-mobile-overview dl > div {
+    display: grid;
+    gap: 2px;
+    padding: 0;
+    font-size: 11px;
+  }
+  .envelope-mobile-overview dd {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .envelope-mobile-overview p {
+    margin: 6px 0 0;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .envelope .mobile-details {
+    margin-top: 4px;
+    border-top: 1px solid #edf0e7;
+  }
+  .envelope .mobile-details-content {
+    padding-bottom: 10px;
+  }
+  .envelope .line-numbers > div {
+    padding: 5px 0;
+    font-size: 12px;
+  }
+  .envelope .line-numbers .envelope-planned-row,
+  .envelope .line-numbers .envelope-spent-row,
+  .envelope .envelope-funding-hint {
+    display: none;
+  }
+  .envelope .actions {
+    padding-top: 4px;
+    gap: 6px;
+  }
+  .envelope .actions .secondary {
+    min-height: 40px;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  .envelope .line-numbers dd {
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+  .closing-panel {
+    padding: 14px;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .overview-spending {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .overview-heading .eyebrow {
+    margin-bottom: 5px;
+  }
+  .overview-heading h2 {
+    font-size: 18px;
+  }
+  .overview-chart-content {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .overview-donut {
+    max-width: 150px;
+  }
+  .overview-chart-total {
+    gap: 4px;
+  }
+  .overview-chart-total > span {
+    font-size: 10px;
+  }
+  .overview-chart-total strong {
+    font-size: 20px;
+    letter-spacing: -0.6px;
+    max-width: 90%;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+  .overview-chart-total strong.compact {
+    font-size: 14px;
+  }
+  .overview-legend > div {
+    display: grid;
+    gap: 3px;
+    padding: 8px 0;
+  }
+  .overview-legend dt {
+    gap: 6px;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  .overview-swatch {
+    width: 7px;
+    height: 7px;
+    flex-basis: 7px;
+  }
+  .overview-legend dd {
+    font-size: 14px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .overview-chart-note {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .overview-context.metrics {
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .overview-context .metric-card {
+    min-width: 0;
+    min-height: 0;
+    padding: 13px;
+  }
+  .metric-heading {
+    min-height: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .metric-card > strong {
+    margin: 8px 0 0;
+    max-width: 100%;
+    font-size: clamp(17px, 5.4vw, 23px);
+    white-space: normal;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .metric-card > small {
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .pot-banner {
+    min-height: 0;
+    padding: 18px 16px;
+  }
+  .pot-banner h2 {
+    margin: 8px 0;
+    font-size: 24px;
+  }
+  .pot-banner .eyebrow {
+    margin-bottom: 8px;
+  }
+  .pot-banner p {
+    max-width: 100%;
+    margin-bottom: 0;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .pot-banner .hero-art {
+    display: none;
+  }
+  .dialog-body {
+    padding: 18px;
+  }
+  .dialog-body > .section-head {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+  }
+  .filters {
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .transaction {
+    padding: 12px 0;
+  }
+  .empty {
+    padding: 20px 12px;
+  }
+}
+@media (max-width: 360px) {
+  .transaction {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    gap: 6px 10px;
+  }
+  .transaction > .transaction-icon {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+  .transaction > div:not(.actions) {
+    grid-column: 2 / -1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .transaction > b {
+    grid-column: 2;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .transaction > .actions {
+    grid-column: 3;
+    margin-left: 0;
+  }
+}

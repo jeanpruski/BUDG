@@ -9,6 +9,7 @@ import {
   parseMoney,
 } from "./domain";
 import { Field, Form } from "./ui";
+import { MobileDetails } from "./MobileDetails";
 import { Actions } from "./screens";
 
 export function BudgetGuide({
@@ -37,6 +38,15 @@ export function BudgetGuide({
     { label: "Le bilan", done: closed },
   ];
   const completed = steps.filter((s) => s.done).length;
+  const nextTitle = closed
+    ? "Prêts pour la suite ?"
+    : zeroMonth
+      ? "Aucun versement attendu pour ce mois"
+      : !prepared
+        ? "Votre prochaine étape : donner un rôle à votre argent"
+        : !funded
+          ? `Il reste ${euro(summary.missingCents)} à recevoir sur le compte commun`
+          : "Le bon réflexe : noter les achats une fois payés";
   return (
     <section className="budget-guide" aria-label="Votre guide du mois">
       <div className="section-head">
@@ -58,6 +68,8 @@ export function BudgetGuide({
         </div>
         <span className="badge green">{completed} / 4 étapes</span>
       </div>
+      <p className="guide-mobile-status">{nextTitle}</p>
+      <MobileDetails label="Étapes et conseils" name="Budget du mois">
       <ol className="guide-steps">
         {steps.map((s, i) => (
           <li key={s.label} className={s.done ? "done" : ""}>
@@ -69,15 +81,7 @@ export function BudgetGuide({
       <div className="guide-next">
         <div>
           <strong>
-            {closed
-              ? "Prêts pour la suite ?"
-              : zeroMonth
-                ? "Aucun versement attendu pour ce mois"
-              : !prepared
-                ? "Votre prochaine étape : donner un rôle à votre argent"
-                : !funded
-                  ? `Il reste ${euro(summary.missingCents)} à recevoir sur le compte commun`
-                  : "Le bon réflexe : noter les achats une fois payés"}
+            {nextTitle}
           </strong>
           <p>
             {closed
@@ -155,6 +159,7 @@ export function BudgetGuide({
           </button>
         )}
       </details>
+      </MobileDetails>
     </section>
   );
 }
