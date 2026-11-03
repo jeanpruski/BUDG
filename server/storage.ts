@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { validateState, type AppState } from "../src/domain";
+import { captureReportEmails } from "./reportQueue";
 
 export type PublicUser = { id: string; email: string; displayName: string; role: "editor" | "viewer" };
 export class ApiError extends Error {
@@ -108,6 +109,7 @@ export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: num
     );
     await writeAudit(client, before, next, actor);
     await captureMonthlyArchives(client, before, next, options);
+    await captureReportEmails(client, before, next, options);
     await client.query(
       `DELETE FROM budg_backups WHERE id IN
        (SELECT id FROM budg_backups ORDER BY revision DESC,created_at DESC,id DESC OFFSET 20)`,

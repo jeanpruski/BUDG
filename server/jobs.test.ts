@@ -102,8 +102,9 @@ describe.runIf(Boolean(testUrl))("tâches sur PostgreSQL", () => {
       CREATE TABLE budg_audit (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now(), actor_user_id uuid NOT NULL, actor_email text NOT NULL, actor_display_name text NOT NULL, entity_type text NOT NULL, entity_id text NOT NULL, entity_month text NOT NULL, action text NOT NULL, revision bigint NOT NULL, before_data jsonb, after_data jsonb);
       CREATE TABLE budg_backups (id uuid PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now(), revision bigint NOT NULL, data jsonb NOT NULL);
       CREATE TABLE budg_monthly_archives (month text PRIMARY KEY,snapshot jsonb NOT NULL,source_revision bigint NOT NULL,finalized boolean NOT NULL DEFAULT false,published_revision bigint NOT NULL DEFAULT 0,CHECK(published_revision <= source_revision));`);
+    await pool.query(await fs.readFile(join(process.cwd(), "server/migrations/003_email_reports.sql"), "utf8"));
   });
-  beforeEach(async () => { await pool.query("TRUNCATE budg_state, budg_audit, budg_backups, budg_monthly_archives RESTART IDENTITY"); });
+  beforeEach(async () => { await pool.query("TRUNCATE budg_state, budg_audit, budg_backups, budg_monthly_archives, budg_email_reports RESTART IDENTITY"); });
   afterAll(async () => {
     await pool?.end();
     if (admin) { await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }

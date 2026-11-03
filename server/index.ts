@@ -7,6 +7,7 @@ import { readConfig, databaseConfig, type ServerConfig } from "./config";
 import { secretToken, tokenHash, sameToken, verifyPassword } from "./security";
 import { ApiError, saveBudget, type PublicUser } from "./storage";
 import { flushMonthlyArchives } from "./jobs";
+import { runReportEmails } from "./reportDelivery";
 
 type Session = { user: PublicUser; csrfToken: string; sessionHash: string };
 type AuthRequest = Request & { auth?: Session };
@@ -150,6 +151,8 @@ export function createApp(config: ServerConfig, pool: Pool) {
       warnings.push("Une archive mensuelle reste en attente de publication sur disque. Les données et la copie mensuelle sont conservées en base ; une nouvelle tentative sera effectuée automatiquement.");
     }
     res.json({ state, ...(warnings.length ? { warnings } : {}) });
+    // Delivery runs after the financial commit. A mail outage must not fail a saved closure.
+    setImmediate(() => { void runReportEmails(config, pool).catch(() => console.error("BUDG: un rapport email reste en attente ; le Cron réessaiera.")); });
   }));
   app.get("/api/backups", requireLogin, route(async (_req, res) => {
     const result = await pool.query("SELECT id,created_at AS \"createdAt\",data FROM budg_backups ORDER BY revision DESC,created_at DESC,id DESC LIMIT 20");

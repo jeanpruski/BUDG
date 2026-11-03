@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, verifyOnlineFrontend } from "./index";
+import * as reportDelivery from "./reportDelivery";
 import { readConfig, databaseConfig } from "./config";
 import { hashPassword, verifyPassword } from "./security";
 import { captureMonthlyArchives, saveBudget, type PublicUser } from "./storage";
@@ -85,6 +86,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${schema}`, max: 5 });
     await pool.query(await readFile(join(process.cwd(), "server/migrations/001_online.sql"), "utf8"));
     await pool.query(await readFile(join(process.cwd(), "server/migrations/002_amount_plans.sql"), "utf8"));
+    await pool.query(await readFile(join(process.cwd(), "server/migrations/003_email_reports.sql"), "utf8"));
     passwordHash = await hashPassword(password);
     privateDir = await mkdtemp(join(tmpdir(), "budg-api-test-"));
     const distDir = join(privateDir, "dist");
@@ -104,7 +106,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   beforeEach(async () => {
-    await pool.query("TRUNCATE budg_sessions,budg_users,budg_state,budg_backups,budg_audit,budg_login_attempts,budg_monthly_archives RESTART IDENTITY CASCADE");
+    await pool.query("TRUNCATE budg_sessions,budg_users,budg_state,budg_backups,budg_audit,budg_login_attempts,budg_monthly_archives,budg_email_reports RESTART IDENTITY CASCADE");
     await rm(join(privateDir, "backups"), { recursive: true, force: true });
     for (const user of [editor, viewer]) await pool.query(
       "INSERT INTO budg_users(id,email,display_name,role,password_hash) VALUES ($1,$2,$3,$4,$5)",
@@ -274,6 +276,50 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     await saveBudget(pool, resetEverything(state), state.revision, editor);
     const actions = (await pool.query("SELECT action FROM budg_audit ORDER BY id")).rows.map((r) => r.action);
     expect(actions).toEqual(["added", "updated", "added", "deleted", "deleted"]);
+  });
+  it("conserve la clôture et son rapport exact malgré une panne du service d’envoi", async () => {
+    const auth = await login();
+    let state = saveLine(budget(), { id: "courses", name: "Courses", plannedCents: 10000, expenseGroup: "DAILY_LIFE", kind: "VARIABLE" });
+    for (const member of state.members) state = savePayment(state, { id: member.id, memberId: member.id, amountCents: 5000, date: "2026-08-01", note: "Versement reçu" });
+    const activeResponse = await request("/api/budget", "PUT", { state, expectedRevision: 0 }, auth);
+    const active = (await activeResponse.json()).state;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const delivery = vi.spyOn(reportDelivery, "runReportEmails").mockRejectedValue(new Error("PRIVATE_MAIL_FAILURE"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await request("/api/budget", "PUT", { state: closeMonth(active), expectedRevision: active.revision }, auth);
+      expect(response.status).toBe(200);
+      const saved = (await response.json()).state;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(saved.budget.status).toBe("CLOSED");
+      expect((await (await request("/api/budget", "GET", undefined, auth)).json()).state).toEqual(saved);
+      const rows = (await pool.query("SELECT event,month,status,snapshot,source_revision,attempts FROM budg_email_reports")).rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ event: "closed", month: "2026-08", status: "pending", source_revision: "2", attempts: 0 });
+      expect(rows[0].snapshot.state).toEqual(saved);
+      expect(rows[0].snapshot.audit).toHaveLength(2);
+      expect(delivery).toHaveBeenCalled();
+      expect(log.mock.calls.flat().join(" ")).not.toContain("PRIVATE_MAIL_FAILURE");
+      expect((await pool.query("SELECT count(*) FROM budg_audit")).rows[0].count).toBe("2");
+      expect((await pool.query("SELECT count(*) FROM budg_backups")).rows[0].count).toBe("1");
+    } finally { delivery.mockRestore(); log.mockRestore(); }
+  });
+  it("annule une clôture dont le rapport n’a pas pu être conservé dans la transaction", async () => {
+    const auth = await login();
+    let state = saveLine(budget(), { id: "courses", name: "Courses", plannedCents: 10000, expenseGroup: "DAILY_LIFE", kind: "VARIABLE" });
+    for (const member of state.members) state = savePayment(state, { id: member.id, memberId: member.id, amountCents: 5000, date: "2026-08-01", note: "Versement reçu" });
+    const savedResponse = await request("/api/budget", "PUT", { state, expectedRevision: 0 }, auth);
+    const saved = (await savedResponse.json()).state;
+    await pool.query("CREATE FUNCTION fail_report() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private report failure'; END $$");
+    await pool.query("CREATE TRIGGER fail_report BEFORE INSERT ON budg_email_reports FOR EACH ROW EXECUTE FUNCTION fail_report()");
+    try {
+      const response = await request("/api/budget", "PUT", { state: closeMonth(saved), expectedRevision: saved.revision }, auth);
+      expect(response.status).toBe(503);
+      expect((await (await request("/api/budget", "GET", undefined, auth)).json()).state).toEqual(saved);
+      expect((await pool.query("SELECT count(*) FROM budg_email_reports")).rows[0].count).toBe("0");
+      expect((await pool.query("SELECT count(*) FROM budg_backups")).rows[0].count).toBe("0");
+      expect((await pool.query("SELECT count(*) FROM budg_audit")).rows[0].count).toBe("2");
+    } finally { await pool.query("DROP TRIGGER fail_report ON budg_email_reports"); await pool.query("DROP FUNCTION fail_report()"); }
   });
   it("annule budget, copie et traces ensemble si la transaction échoue", async () => {
     let state = await saveBudget(pool, budget(), 0, editor);

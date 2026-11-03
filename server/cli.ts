@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { resolve, join } from "node:path";
 import { Pool } from "pg";
 import { validateState } from "../src/domain";
 import { readConfig, databaseConfig } from "./config";
@@ -8,6 +9,12 @@ import { saveBudget, type PublicUser } from "./storage";
 import { runJobs, parseServerSnapshot, restoreDisasterSnapshot, flushMonthlyArchives } from "./jobs";
 import migrationSql from "./migrations/001_online.sql";
 import amountPlanMigrationSql from "./migrations/002_amount_plans.sql";
+import emailReportMigrationSql from "./migrations/003_email_reports.sql";
+import { runReportEmails } from "./reportDelivery";
+import { readReportEmailSettings, deliverReportMessage } from "./reportMail";
+import { renderMonthlyReport } from "./monthlyReport";
+import { monthSchema } from "../src/domain";
+import type { ServerSnapshot } from "./jobs";
 
 function argument(args: string[], name: string): string | undefined {
   const index = args.indexOf(`--${name}`);
@@ -43,6 +50,7 @@ export async function migrate(pool: Pool) {
     await client.query("SELECT pg_advisory_xact_lock($1)", [1112884296]);
     await client.query(migrationSql);
     await client.query(amountPlanMigrationSql);
+    await client.query(emailReportMigrationSql);
     await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }
@@ -56,6 +64,9 @@ export async function runCli(args = process.argv.slice(2)) {
   create-user --email EMAIL --name NOM --role editor|viewer
   password --email EMAIL
   jobs [--daily|--monthly]
+  reports
+  report-preview --month AAAA-MM --output DOSSIER_PRIVE
+  report-test --month AAAA-MM
   restore FICHIER --email EDITEUR
   restore-disaster FICHIER
 Les mots de passe sont lus depuis BUDG_USER_PASSWORD ou l’entrée standard, jamais depuis un argument.
@@ -104,9 +115,57 @@ restore-disaster exige une base sans budget ni journal et restaure les traces or
     } else if (command === "jobs") {
       if (options.includes("--daily") && options.includes("--monthly")) throw new Error("Choisissez une seule fréquence.");
       const mode = options.includes("--monthly") ? "monthly" : options.includes("--daily") ? "daily" : "scheduled";
-      const result = await runJobs(config, pool, { mode });
+      let backupFailed = false, emailFailed = false;
+      try {
+        const result = await runJobs(config, pool, { mode });
+        console.log(JSON.stringify(result));
+        for (const warning of result.warnings || []) console.error(warning);
+      } catch {
+        backupFailed = true;
+        console.error("La sauvegarde sur disque a échoué. Les rapports email seront traités séparément.");
+      }
+      try {
+        const result = await runReportEmails(config, pool);
+        console.log(JSON.stringify({ reports: result }));
+        if (result.failed.length) console.error("Un rapport email reste en attente ; une nouvelle tentative est programmée.");
+      } catch {
+        emailFailed = true;
+        console.error("Les rapports email n’ont pas pu être traités ; la prochaine tâche horaire réessaiera.");
+      }
+      if (backupFailed || emailFailed) throw new Error("Une tâche BUDG nécessite une vérification ; les données financières sont conservées.");
+    } else if (command === "reports") {
+      const result = await runReportEmails(config, pool);
       console.log(JSON.stringify(result));
-      for (const warning of result.warnings || []) console.error(warning);
+      if (result.failed.length) throw new Error("Un rapport email reste en attente ; une nouvelle tentative est programmée.");
+    } else if (command === "report-preview" || command === "report-test") {
+      const month = monthSchema.parse(argument(options, "month"));
+      const client = await pool.connect();
+      let snapshot: ServerSnapshot;
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock($1)", [1112884295]);
+        const state = validateState((await client.query("SELECT data FROM budg_state WHERE id=1")).rows[0]?.data);
+        const audit = (await client.query("SELECT * FROM budg_audit ORDER BY id")).rows;
+        snapshot = parseServerSnapshot({ format: "BUDG_SERVER_BACKUP", version: 1, kind: "monthly", month, createdAt: new Date().toISOString(), timeZone: config.timeZone, state, audit });
+        await client.query("COMMIT");
+      } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+      finally { client.release(); }
+      const report = await renderMonthlyReport(snapshot, "monthly");
+      if (command === "report-preview") {
+        const directory = resolve(argument(options, "output") || join(config.backupDir, "report-preview", month));
+        const publicRoot = resolve(config.distDir);
+        if (directory === publicRoot || directory.startsWith(publicRoot + "/")) throw new Error("Le rapport doit rester dans un dossier privé.");
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        let previewHtml = report.html;
+        for (const attachment of report.attachments) if (attachment.cid) previewHtml = previewHtml.replaceAll(`cid:${attachment.cid}`, attachment.filename);
+        await writeFile(join(directory, "email.html"), previewHtml, { mode: 0o600 });
+        for (const attachment of report.attachments) await writeFile(join(directory, attachment.filename), attachment.content, { mode: 0o600 });
+        console.log("Aperçu et sauvegardes créés dans le dossier privé demandé. Aucun email envoyé.");
+      } else {
+        const settings = readReportEmailSettings(config);
+        await deliverReportMessage(settings, { ...report, subject: "[TEST] " + report.subject }, `<budg-report-test-${randomUUID()}@${new URL(config.appOrigin).hostname}>`);
+        console.log("Email de test remis au service d’envoi. Vérifiez sa réception et les pièces jointes.");
+      }
     } else if (command === "restore-disaster") {
       const filename = options[0];
       if (!filename || filename.startsWith("--")) throw new Error("Indiquez le fichier de sauvegarde serveur.");

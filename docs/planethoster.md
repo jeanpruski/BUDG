@@ -172,6 +172,8 @@ Les fichiers du Cron sont sur le même hébergement que la base. Conserver aussi
 
 ## Validation avant ouverture
 
+Les rapports par email (1er du mois à midi et clôture manuelle), leurs pièces jointes restaurables et leur configuration privée sont décrits dans [Récapitulatifs et sauvegardes par email](email-reports.md). Ils utilisent le Cron horaire existant et restent désactivés tant que l’expéditeur et le destinataire ne sont pas configurés.
+
 - Les deux comptes se connectent sur HTTPS ; seul Jean peut modifier, y compris par appel direct à l’API.
 - Les montants importés correspondent au budget local conservé.
 - Le quotidien manuel fonctionne et son remplacement conserve un seul fichier.

@@ -1,0 +1,134 @@
+import { describe, expect, it } from "vitest";
+import { budgetSummary, validateState, type AppState } from "../src/domain";
+import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment, savePotExpense, startNextMonth } from "../src/store";
+import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
+import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
+
+function setup() {
+  const state = configureHousehold(initialState("2026-08"), ["Camille", "Alex"], [300000, 200000], "2026-08");
+  return { ...state, budget: { ...state.budget, lines: [] } };
+}
+function envelope(state: AppState, id: string, amount: number, group: "HOUSING" | "DAILY_LIFE", kind: "FIXED" | "VARIABLE" | "RESERVE" = "VARIABLE") {
+  return saveLine(state, { id, name: id, plannedCents: amount, expenseGroup: group, kind });
+}
+function fund(state: AppState) {
+  for (const member of budgetSummary(state.budget).balances) if (member.remaining) state = savePayment(state, {
+    id: `payment-${state.budget.payments.length}`, memberId: member.id, amountCents: member.remaining,
+    date: `${state.budget.id}-01`, note: "Virement reçu",
+  });
+  return state;
+}
+function expense(state: AppState, lineId: string, amountCents: number) {
+  return saveExpense(state, { id: `expense-${state.budget.expenses.length}`, lineId, amountCents, date: `${state.budget.id}-02`, description: "Paiement enregistré" }, true);
+}
+function snapshot(state: AppState, month = state.budget.id): ServerSnapshot {
+  return { format: "BUDG_SERVER_BACKUP", version: 1, kind: "monthly", month, createdAt: "2026-09-01T10:00:00Z", timeZone: "Europe/Paris", state: { ...state, revision: 20 }, audit: [] };
+}
+function history() {
+  let state = envelope(setup(), "Logement", 100000, "HOUSING", "FIXED");
+  state = envelope(state, "Taxe foncière", 20000, "HOUSING", "RESERVE");
+  state = envelope(state, "Courses", 40000, "DAILY_LIFE");
+  state = envelope(state, "Vacances", 20000, "DAILY_LIFE", "RESERVE");
+  state = fund(state);
+  state = expense(state, "Logement", 75000);
+  state = expense(state, "Taxe foncière", 5000);
+  state = expense(state, "Courses", 12345);
+  state = closeMonth(state);
+  state = savePotExpense(state, { id: "pot-august", amountCents: 5000, date: "2026-08-31", description: "Achat du pot" });
+  state = startNextMonth(state);
+  state = savePayment(state, { id: "future-payment", memberId: "jean", amountCents: 500000, date: "2026-09-01", note: "Hors du mois ciblé" });
+  state = expense(state, "Courses", 1234);
+  state = savePotExpense(state, { id: "pot-september", amountCents: 2000, date: "2026-09-01", description: "Hors du mois ciblé" });
+  return snapshot(state, "2026-08");
+}
+
+describe("comptes rendus mensuels par email", () => {
+  it("calcule le mois archivé et le solde de fin de mois sans intégrer les opérations suivantes", () => {
+    const data = monthlyReportData(history());
+    expect(data.month).toBe("2026-08");
+    expect(data.closed).toBe(true);
+    expect(data.spentCents).toBe(97345);
+    expect(data.receivedCents).toBe(180000);
+    expect(data.categories.map((category) => category.cents)).toEqual([80000, 12345, 5000]);
+    expect(data.accountBalanceCents).toBe(82655);
+    expect(data.reserveBalanceCents).toBe(35000);
+    expect(data.potBalanceCents).toBe(47655);
+    expect(data.operations).toHaveLength(6);
+    expect(data.operations.some((operation) => operation.description.includes("Hors du mois ciblé"))).toBe(false);
+  });
+  it("distingue les prévisions impayées des réserves financées et des dépenses réelles", async () => {
+    const raw = snapshot(envelope(envelope(setup(), "Logement", 100000, "HOUSING"), "Vacances", 20000, "DAILY_LIFE", "RESERVE"));
+    const data = monthlyReportData(raw);
+    expect(data.summary.plannedCents).toBe(120000);
+    expect(data.summary.missingCents).toBe(120000);
+    expect(data.summary.reservedCents).toBe(20000);
+    expect(data.spentCents).toBe(0);
+    expect(data.receivedCents).toBe(0);
+    expect(data.reserveBalanceCents).toBe(0);
+    const report = await renderMonthlyReport(raw, "monthly");
+    expect(report.html).toContain("Aucune dépense enregistrée");
+    expect(report.html).toContain("Bilan provisoire");
+    expect(report.html).not.toMatch(/NaN|Infinity/);
+    expect(report.text).toContain("clôture manuelle à venir");
+  });
+  it("joint une sauvegarde importable et une archive serveur restaurable avec le journal complet", async () => {
+    const raw = history();
+    raw.audit = [{ id: "1", created_at: "2026-08-03T12:00:00.000Z", actor_user_id: "11111111-1111-4111-8111-111111111111", actor_email: "camille@example.test", actor_display_name: "Camille", entity_type: "expense", entity_id: "expense-0", entity_month: "2026-08", action: "added", revision: "1", before_data: null, after_data: { id: "expense-0", lineId: "Logement", amountCents: 75000, date: "2026-08-02", description: "Paiement enregistré" } }];
+    const report = await renderMonthlyReport(raw, "closed");
+    const budget = report.attachments.find((attachment) => attachment.filename === "budget-2026-08.json")!;
+    const server = report.attachments.find((attachment) => attachment.filename === "archive-serveur-2026-08.json")!;
+    expect(validateState(JSON.parse(budget.content.toString()))).toEqual(validateState(raw.state));
+    expect(parseServerSnapshot(JSON.parse(server.content.toString()))).toEqual(parseServerSnapshot(raw));
+    expect(report.subject).toBe("BUDG · Clôture · août 2026");
+    expect(report.text).toContain("tout le budget et son historique");
+    expect(report.html).toContain("l’ensemble du budget et de son historique");
+  });
+  it("génère un PDF paginé et une image PNG intégrée sans dépendance à un service externe", async () => {
+    const report = await renderMonthlyReport(history(), "monthly");
+    const pdf = report.attachments.find((attachment) => attachment.contentType === "application/pdf")!;
+    const png = report.attachments.find((attachment) => attachment.contentType === "image/png")!;
+    expect(pdf.content.subarray(0, 8).toString()).toMatch(/^%PDF-1\./);
+    expect((pdf.content.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length).toBe(3);
+    expect(png.content.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(report.html).toContain(`src="cid:${png.cid}"`);
+    expect(report.html).not.toMatch(/src=["']https?:\/\//i);
+  });
+  it("échappe les noms libres dans le HTML et garde les données sources intactes", async () => {
+    const dangerous = '<img src=x onerror="alert(1)"> &';
+    const state = configureHousehold(initialState("2026-08"), [dangerous, "Alex"], [300000, 200000], "2026-08");
+    const raw = snapshot(state);
+    const original = JSON.stringify(raw);
+    const report = await renderMonthlyReport(raw, "monthly");
+    expect(report.html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp;");
+    expect(report.html).not.toContain(dangerous);
+    expect(JSON.stringify(raw)).toBe(original);
+    const saved = JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString());
+    expect(saved.members[0].name).toBe(dangerous);
+  });
+  it("ne produit pas de faux bilan de clôture ni de rapport pour un mois absent", async () => {
+    await expect(renderMonthlyReport(snapshot(setup()), "closed")).rejects.toThrow(/clôturé/);
+    await expect(renderMonthlyReport({ ...history(), month: "2026-07" }, "monthly")).rejects.toThrow(/absent/);
+  });
+  it("pagine toutes les enveloppes au lieu de perdre la fin du tableau", async () => {
+    let state = setup();
+    for (let index = 0; index < 40; index++) state = envelope(state, `Enveloppe ${index + 1}`, index + 1, "DAILY_LIFE");
+    const report = await renderMonthlyReport(snapshot(state), "monthly");
+    const pdf = report.attachments.find((attachment) => attachment.contentType === "application/pdf")!;
+    expect((pdf.content.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    const budget = JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString());
+    expect(budget.budget.lines).toHaveLength(40);
+  });
+  it("rattache un ancien remboursement à sa date réelle, sans l’anticiper dans le solde du mois précédent", () => {
+    const august = closeMonth(expense(fund(envelope(setup(), "Courses", 50000, "DAILY_LIFE")), "Courses", 42000));
+    const withRefund = { ...august, budget: { ...august.budget, refunds: [{ memberId: "jean", amountCents: 4000, paidOn: "2026-09-01" }] } };
+    withRefund.budget.closedPotCents = budgetSummary(withRefund.budget).surplusCents;
+    const september = startNextMonth(validateState(withRefund));
+    const previous = monthlyReportData(snapshot(september, "2026-08"));
+    const current = monthlyReportData(snapshot(september, "2026-09"));
+    expect(previous.accountBalanceCents).toBe(8000);
+    expect(previous.refundsCents).toBe(0);
+    expect(current.accountBalanceCents).toBe(4000);
+    expect(current.refundsCents).toBe(4000);
+    expect(current.operations).toMatchObject([{ type: "Ancien remboursement", date: "2026-09-01", amountCents: 4000 }]);
+  });
+});
