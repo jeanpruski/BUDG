@@ -1,0 +1,128 @@
+.monthly-income-panel {
+  margin-bottom: 22px;
+}
+.monthly-income-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin-bottom: 18px;
+}
+.monthly-income-heading h2 {
+  margin: 0;
+}
+.monthly-income-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.monthly-income-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 28px;
+  margin: 0;
+}
+.monthly-income-amounts > div {
+  display: block;
+  min-width: 0;
+  padding: 0;
+}
+.monthly-income-amounts dt {
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.monthly-income-amounts dt span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.monthly-income-amounts dd {
+  margin: 7px 0 0;
+  color: var(--green);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.monthly-income-explanation {
+  margin: 17px 0 0;
+  font-size: 12px;
+}
+.monthly-income-prepared {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--mint);
+  color: var(--green);
+}
+.monthly-income-prepared strong {
+  font-size: 12px;
+}
+.monthly-income-prepared p {
+  margin: 6px 0;
+  color: inherit;
+  font-size: 12px;
+}
+.monthly-income-prepared small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.monthly-income-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.monthly-income-actions button {
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+.income-preview {
+  margin: 8px 0 18px;
+}
+.income-preview h3 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.income-preview-member + .income-preview-member {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.income-preview-member > strong {
+  color: var(--ink);
+}
+.income-preview-member dl {
+  margin: 7px 0 0;
+}
+.income-preview-member dl > div {
+  gap: 8px;
+  font-size: 12px;
+}
+.income-preview-member dd {
+  white-space: nowrap;
+}
+.income-preview-member .hint {
+  margin-bottom: 0;
+}
+@media (max-width: 560px) {
+  .monthly-income-amounts {
+    gap: 16px;
+  }
+  .monthly-income-amounts dt span {
+    display: block;
+    margin-top: 4px;
+  }
+  .monthly-income-amounts dd {
+    font-size: 19px;
+  }
+  .monthly-income-actions {
+    flex-direction: column;
+  }
+  .monthly-income-actions button {
+    width: 100%;
+  }
+}

@@ -26,9 +26,10 @@ export function BudgetGuide({
 }) {
   const b = state.budget;
   const summary = budgetSummary(b);
-  const prepared = summary.plannedCents > 0;
+  const prepared = summary.plannedCents > 0 || b.lines.some((line) => line.amountPlan || line.openingShares.some((share) => share.amountCents > 0));
   const funded = prepared && summary.missingCents === 0;
   const closed = b.status === "CLOSED";
+  const zeroMonth = prepared && summary.plannedCents === 0 && summary.missingCents === 0 && !b.expenses.length && !b.payments.length;
   const steps = [
     { label: "Votre duo", done: true },
     { label: "Vos enveloppes", done: prepared },
@@ -46,6 +47,8 @@ export function BudgetGuide({
           <h2>
             {closed
               ? "Un mois de plus, ensemble !"
+              : zeroMonth
+                ? "Rien à financer ce mois"
               : !prepared
                 ? "On construit votre budget ?"
                 : !funded
@@ -68,6 +71,8 @@ export function BudgetGuide({
           <strong>
             {closed
               ? "Prêts pour la suite ?"
+              : zeroMonth
+                ? "Aucun versement attendu pour ce mois"
               : !prepared
                 ? "Votre prochaine étape : donner un rôle à votre argent"
                 : !funded
@@ -77,6 +82,8 @@ export function BudgetGuide({
           <p>
             {closed
               ? "Le surplus reste dans votre pot commun. Au prochain mois, on vérifiera d’abord vos salaires."
+              : zeroMonth
+                ? "Vos enveloppes restent prêtes pour les mois suivants. Vous pouvez clôturer ce mois à zéro si aucune dépense n’a eu lieu."
               : !prepared
                 ? "Je vous accompagne enveloppe par enveloppe : logement, courses, puis projets. Vous gardez la main sur chaque montant."
                 : !funded
@@ -89,6 +96,8 @@ export function BudgetGuide({
           onClick={
             closed
               ? actions.next
+              : zeroMonth
+                ? actions.close
               : !prepared
                 ? prepare
                 : !funded
@@ -98,6 +107,8 @@ export function BudgetGuide({
         >
           {closed
             ? "Préparer le prochain mois"
+            : zeroMonth
+              ? "Vérifier la clôture"
             : !prepared
               ? "Me guider pas à pas"
               : !funded

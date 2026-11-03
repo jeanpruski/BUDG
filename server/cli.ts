@@ -7,6 +7,7 @@ import { hashPassword } from "./security";
 import { saveBudget, type PublicUser } from "./storage";
 import { runJobs, parseServerSnapshot, restoreDisasterSnapshot, flushMonthlyArchives } from "./jobs";
 import migrationSql from "./migrations/001_online.sql";
+import amountPlanMigrationSql from "./migrations/002_amount_plans.sql";
 
 function argument(args: string[], name: string): string | undefined {
   const index = args.indexOf(`--${name}`);
@@ -41,6 +42,7 @@ export async function migrate(pool: Pool) {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [1112884296]);
     await client.query(migrationSql);
+    await client.query(amountPlanMigrationSql);
     await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }

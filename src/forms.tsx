@@ -10,8 +10,10 @@ import {
   euro,
   nextMonth,
   monthLabel,
+  parseMoney,
   today,
 } from "./domain";
+import { monthlyIncomePreview } from "./monthlyIncome";
 import { membersForMonth } from "./store";
 import { Field, Form } from "./ui";
 
@@ -101,11 +103,21 @@ export function LineForm({
         </select>
       </label>
       <Field
-        label="Montant à financer chaque mois (€)"
+        label={line ? "Montant à financer ce mois (€)" : "Montant habituel par mois (€)"}
         name="amount"
         value={line ? line.plannedCents / 100 : ""}
         placeholder="Ex. 500"
       />
+      {line && (
+        <label className="field">
+          Appliquer ce montant
+          <select name="amountScope" defaultValue="MONTH">
+            <option value="MONTH">Seulement ce mois</option>
+            <option value="FROM_MONTH">À partir de ce mois</option>
+          </select>
+          <small>Pour prévoir des montants futurs, utilisez « Montants par mois » sur l’enveloppe.</small>
+        </label>
+      )}
       <AllocationFields
         key={line?.id ?? group}
         members={members}
@@ -319,74 +331,84 @@ export function MonthlyIncomeForm({
   state,
   busy,
   submit,
+  mode = "open",
 }: {
   state: AppState;
   busy: boolean;
   submit: (data: FormData) => void;
+  mode?: "current" | "schedule" | "open";
 }) {
-  const month = nextMonth(state.budget.id);
-  const planned = membersForMonth(state, month);
-  const previous = state.budget.members;
-  const hasScheduledChange = planned.some(
-    (m, i) => m.incomeCents !== previous[i].incomeCents,
-  );
-  const [mode, setMode] = useState(hasScheduledChange ? "scheduled" : "same");
-  const members = mode === "same" ? previous : planned;
+  const current = mode === "current";
+  const month = current ? state.budget.id : nextMonth(state.budget.id);
+  const members = current ? state.budget.members : membersForMonth(state, month);
+  const [values, setValues] = useState(() => members.map((member) => String(member.incomeCents / 100)));
+  let preview: ReturnType<typeof monthlyIncomePreview> = [];
+  let previewError = "";
+  try {
+    const incomes = state.members.map((member) => parseMoney(values[members.findIndex((m) => m.id === member.id)], true));
+    if (!incomes.some((income) => income > 0)) throw new Error("Renseignez au moins un salaire positif.");
+    preview = monthlyIncomePreview(state, incomes, current);
+  } catch (error) {
+    previewError = error instanceof Error ? error.message : "Vérifiez les salaires saisis.";
+  }
+  const hasScheduled = !current && state.incomeHistory.some((income) => income.effectiveFrom === month);
   return (
     <Form
       busy={busy}
       submit={submit}
-      button={`Confirmer et ouvrir ${monthLabel(month)}`}
+      button={current ? "Enregistrer et recalculer" : mode === "schedule" ? "Enregistrer pour le mois prochain" : `Confirmer et ouvrir ${monthLabel(month)}`}
     >
       <p>
-        Avant de calculer vos contributions, confirmez vos salaires mensuels
-        nets pour {monthLabel(month)}.
+        {current
+          ? `Saisissez les salaires nets réellement reçus pour ${monthLabel(month)}, centimes compris.`
+          : `Renseignez les salaires nets prévus pour ${monthLabel(month)}. Vous pourrez les corriger une fois les montants exacts connus.`}
       </p>
-      <label className="field">
-        Vos salaires ce mois-ci
-        <select
-          name="incomeMode"
-          value={mode}
-          onChange={(event) => setMode(event.target.value)}
-        >
-          <option value="same">Identiques au mois précédent</option>
-          {hasScheduledChange && (
-            <option value="scheduled">
-              Utiliser les salaires déjà programmés
-            </option>
-          )}
-          <option value="edit">Saisir les salaires de ce mois</option>
-        </select>
-      </label>
-      {hasScheduledChange && (
+      {hasScheduled && (
         <p className="hint">
-          Un changement est déjà programmé pour ce mois. Choisir les salaires
-          précédents remplacera ce changement.
+          Les salaires préparés pour ce mois sont préremplis ci-dessous.
         </p>
       )}
-      {members.map((m) =>
-        mode === "edit" ? (
-          <Field
-            key={`${mode}-${m.id}`}
-            label={`Salaire net de ${m.name} (€)`}
-            name={`income-${m.id}`}
-            value={m.incomeCents / 100}
-          />
-        ) : (
-          <div className="panel" key={m.id}>
-            <strong>{m.name}</strong> · {euro(m.incomeCents)}
+      <div className="form-grid">
+        {members.map((member, index) => (
+          <label className="field" key={member.id}>
+            Salaire net de {member.name} (€)
             <input
-              type="hidden"
-              name={`income-${m.id}`}
-              value={m.incomeCents / 100}
+              name={`income-${member.id}`}
+              inputMode="decimal"
+              type="text"
+              maxLength={20}
+              required
+              value={values[index]}
+              onChange={(event) => setValues(values.map((value, i) => i === index ? event.target.value : value))}
             />
+          </label>
+        ))}
+      </div>
+      <div className="form-context income-preview" aria-live="polite" aria-atomic="true">
+        <h3>{current ? "Vos contributions recalculées" : "Contributions prévues le mois prochain"}</h3>
+        {previewError ? <p>{previewError}</p> : preview.map((member) => (
+          <div className="income-preview-member" key={member.id}>
+            <strong>{member.name}</strong>
+            <dl>
+              <div><dt>Contribution prévue</dt><dd>{euro(member.expected)}</dd></div>
+              {current && <>
+                <div><dt>Déjà versé</dt><dd>{euro(member.paid)}</dd></div>
+                <div><dt>Reste à verser</dt><dd>{euro(member.remaining)}</dd></div>
+              </>}
+            </dl>
+            {member.overpaid > 0 && <p className="hint">Les versements déjà enregistrés dépassent cette contribution de {euro(member.overpaid)}. Ils restent pris en compte.</p>}
+            {current && member.remaining > Math.max(0, member.expected - member.paid) && <p className="hint">Le reste à verser inclut les dépenses qui dépassent le budget prévu.</p>}
           </div>
-        ),
-      )}
+        ))}
+        {!current && <p className="hint">Estimation à partir des montants des enveloppes prévus pour {monthLabel(month)}.</p>}
+      </div>
       <p className="hint">
-        Les enveloppes « Selon vos salaires » seront recalculées. Les
-        répartitions à 50/50 ou personnalisées sont conservées. Le mois clôturé
-        reste inchangé.
+        Les enveloppes « Selon vos salaires » sont recalculées. Les répartitions à 50/50 ou personnalisées sont conservées.
+        {current ? " Vos versements, dépenses et réserves reportées sont conservés." : " Le mois en cours et les mois clôturés sont conservés."}
+        {mode === "schedule" && " Cette préparation ne clôture ni n’ouvre de mois."}
+      </p>
+      <p className="hint">
+        Ces salaires serviront aussi de base aux mois suivants, jusqu’à votre prochaine saisie.
       </p>
     </Form>
   );

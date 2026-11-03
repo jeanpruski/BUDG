@@ -16,6 +16,10 @@ Safari utilise [apple-touch-icon.png](../public/apple-touch-icon.png) pour le ra
 
 La vue d’ensemble (`src/Overview.tsx`) présente un graphique des dépenses du mois regroupées en appartement, vie quotidienne et achats du pot commun, accompagné du solde du compte et des versements attendus. Les montants représentent les paiements enregistrés ; les réserves apparaissent lorsqu’elles sont dépensées. Les opérations détaillées restent dans leurs onglets. La clôture et le passage au mois suivant sont accessibles dans **Enveloppes**.
 
+Dans **Versements**, « Salaires du mois » affiche les revenus du mois consulté. L’éditeur peut saisir les salaires nets exacts, centimes compris, ou préparer ceux du mois suivant avant la clôture. Le formulaire présente les contributions recalculées et, pour le mois courant, les versements réels et le reste à verser, y compris les dépassements de dépenses. Seules les répartitions au prorata changent ; les règles à 50/50 ou personnalisées, les opérations, les réserves reportées et les mois clôturés sont conservés. Les salaires préparés sont préremplis lors de l’ouverture manuelle du mois suivant et restent modifiables. Les montants servent de base aux mois suivants jusqu’à une nouvelle saisie. Le lecteur consulte ces informations sans action d’édition. Le stockage PostgreSQL existant est conservé.
+
+Dans **Enveloppes**, un premier mois uniquement préparatoire peut être remplacé par le premier mois réellement suivi, sans statistique ni mouvement financier pour la préparation. **Montants par mois** permet de programmer des exceptions mensuelles et des changements durables, avec aperçu et retrait des programmations. Les factures à zéro affichent « Rien à financer ce mois ». Voir [le guide de démarrage et des mensualités](monthly-planning.md).
+
 - Un écran avec squelette animé accompagne le chargement réel du stockage.
 - Les boutons de sauvegarde et la lecture des copies affichent un indicateur pendant l’opération, sans délai artificiel.
 - Les vues, fenêtres et cartes apparaissent progressivement ; les montants restent exacts et ne passent pas par des valeurs intermédiaires fictives.

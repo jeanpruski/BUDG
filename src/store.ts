@@ -1,5 +1,7 @@
 import {
   AppState,
+  AmountPlan,
+  AmountScope,
   Budget,
   BudgetLine,
   Expense,
@@ -8,6 +10,7 @@ import {
   PotExpense,
   Share,
   budgetSummary,
+  amountForMonth,
   closeBudget,
   monthLabel,
   monthSchema,
@@ -36,7 +39,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 4,
+    version: 5,
     revision: 0,
     configured: false,
     members,
@@ -89,6 +92,38 @@ function active(s: AppState) {
 function withBudget(s: AppState, budget: Budget) {
   return validateState({ ...s, budget });
 }
+export type LineAmountOptions = { month?: string; scope?: AmountScope };
+function checkAmountMonth(s: AppState, month: string, scope: AmountScope) {
+  monthSchema.parse(month);
+  if (month < s.budget.id)
+    throw new Error("Choisissez le mois en cours ou un mois à venir.");
+  if (scope !== "MONTH" && scope !== "FROM_MONTH")
+    throw new Error("Choisissez un montant pour ce mois ou à partir de ce mois.");
+}
+function planLineAmount(
+  line: BudgetLine | undefined,
+  amountCents: number,
+  month: string,
+  scope: AmountScope,
+): AmountPlan {
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0 || amountCents > 1_000_000_000)
+    throw new Error("Renseignez un montant valide, positif ou nul, pour cette enveloppe.");
+  const plan = line?.amountPlan ?? {
+    baseCents: line?.plannedCents ?? 0,
+    changes: [],
+    exceptions: [],
+  };
+  return {
+    baseCents: plan.baseCents,
+    changes: (scope === "FROM_MONTH"
+      ? [...plan.changes.filter((change) => change.fromMonth !== month), { fromMonth: month, amountCents }]
+      : [...plan.changes]).sort((a, b) => a.fromMonth.localeCompare(b.fromMonth)),
+    exceptions: [
+      ...plan.exceptions.filter((exception) => exception.month !== month),
+      ...(scope === "MONTH" ? [{ month, amountCents }] : []),
+    ].sort((a, b) => a.month.localeCompare(b.month)),
+  };
+}
 export function saveLine(
   s: AppState,
   line: Pick<
@@ -96,6 +131,7 @@ export function saveLine(
     "id" | "name" | "plannedCents" | "expenseGroup" | "kind" | "dueDay"
   > &
     Partial<Pick<BudgetLine, "allocationType" | "customPercentages">>,
+  options?: LineAmountOptions,
 ): AppState {
   active(s);
   const old = s.budget.lines.find((l) => l.id === line.id);
@@ -122,13 +158,22 @@ export function saveLine(
     allocationType === "CUSTOM"
       ? (line.customPercentages ?? old?.customPercentages)
       : undefined;
+  const month = options?.month ?? s.budget.id;
+  const scope = options?.scope ?? "FROM_MONTH";
+  checkAmountMonth(s, month, scope);
+  const amountPlan = options || (old && line.plannedCents !== old.plannedCents)
+    ? planLineAmount(old, line.plannedCents, month, scope)
+    : old?.amountPlan;
+  const plannedCents = amountForMonth({ plannedCents: line.plannedCents, amountPlan }, s.budget.id);
   const updated: BudgetLine = {
     ...line,
+    amountPlan,
+    plannedCents,
     name: line.name.trim(),
     allocationType,
     customPercentages,
     shares: sharesFor(
-      line.plannedCents,
+      plannedCents,
       allocationType,
       s.budget.members,
       customPercentages,
@@ -141,6 +186,46 @@ export function saveLine(
     lines: old
       ? s.budget.lines.map((l) => (l.id === line.id ? updated : l))
       : [...s.budget.lines, updated],
+  });
+}
+export function saveLineAmount(
+  s: AppState,
+  lineId: string,
+  amountCents: number,
+  month: string,
+  scope: AmountScope,
+) {
+  active(s);
+  checkAmountMonth(s, month, scope);
+  const line = s.budget.lines.find((entry) => entry.id === lineId);
+  if (!line) throw new Error("Cette enveloppe n’existe pas.");
+  return saveLine(s, { ...line, plannedCents: amountCents }, { month, scope });
+}
+export function removeLineAmount(
+  s: AppState,
+  lineId: string,
+  month: string,
+  scope: AmountScope,
+) {
+  active(s);
+  checkAmountMonth(s, month, scope);
+  const line = s.budget.lines.find((entry) => entry.id === lineId);
+  if (!line) throw new Error("Cette enveloppe n’existe pas.");
+  if (!line.amountPlan) return s;
+  const amountPlan: AmountPlan = {
+    ...line.amountPlan,
+    changes: line.amountPlan.changes.filter((change) => scope !== "FROM_MONTH" || change.fromMonth !== month),
+    exceptions: line.amountPlan.exceptions.filter((exception) => scope !== "MONTH" || exception.month !== month),
+  };
+  const plannedCents = amountForMonth({ ...line, amountPlan }, s.budget.id);
+  return withBudget(s, {
+    ...s.budget,
+    lines: s.budget.lines.map((entry) => entry.id === lineId ? {
+      ...entry,
+      amountPlan,
+      plannedCents,
+      shares: sharesFor(plannedCents, entry.allocationType, s.budget.members, entry.customPercentages),
+    } : entry),
   });
 }
 export function removeLine(s: AppState, id: string) {
@@ -301,9 +386,10 @@ export function startNextMonth(s: AppState) {
       members,
       lines: s.budget.lines.map((l) => ({
         ...l,
+        plannedCents: amountForMonth(l, month),
         settled: false,
         shares: sharesFor(
-          l.plannedCents,
+          amountForMonth(l, month),
           l.allocationType,
           members,
           l.customPercentages,
@@ -366,16 +452,39 @@ export function resetState(s: AppState) {
   });
 }
 
+export function saveMonthlyIncomes(
+  s: AppState,
+  incomes: number[],
+  month: string,
+) {
+  monthSchema.parse(month);
+  if (month === s.budget.id && s.budget.status === "CLOSED")
+    throw new Error("Ce mois est clôturé. Ses salaires sont verrouillés.");
+  if (month !== s.budget.id && month !== nextMonth(s.budget.id))
+    throw new Error(
+      "Choisissez le mois en cours ou le mois suivant pour saisir les salaires.",
+    );
+  if (
+    incomes.length !== s.members.length ||
+    incomes.some(
+      (income) =>
+        !Number.isSafeInteger(income) || income < 0 || income > 1_000_000_000,
+    )
+  )
+    throw new Error("Renseignez un salaire valide pour chaque personne.");
+  return configureHousehold(
+    s,
+    s.members.map((member) => member.name),
+    incomes,
+    month,
+  );
+}
+
 export function confirmMonthlyIncomes(s: AppState, incomes: number[]) {
   if (s.budget.status !== "CLOSED")
     throw new Error("Clôturez le mois en cours avant de préparer le suivant.");
   return startNextMonth(
-    configureHousehold(
-      s,
-      s.members.map((m) => m.name),
-      incomes,
-      nextMonth(s.budget.id),
-    ),
+    saveMonthlyIncomes(s, incomes, nextMonth(s.budget.id)),
   );
 }
 

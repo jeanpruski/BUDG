@@ -4,6 +4,10 @@ import { BACKUP_WARNING_EVENT, RemoteUser, serverStorageMode } from "./remote";
 import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
 import { MonthClosing } from "./MonthClosing";
+import { MonthlyIncomePanel } from "./MonthlyIncomePanel";
+import { EnvelopeAmountForm } from "./EnvelopeAmountForm";
+import { TrackingStartForm, TrackingStartPanel } from "./TrackingStart";
+import { startTrackingAtMonth } from "./budgetStart";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
 import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
 import {
@@ -30,6 +34,7 @@ import {
 } from "lucide-react";
 import {
   AppState,
+  AmountScope,
   BudgetLine,
   Expense,
   Payment,
@@ -38,6 +43,7 @@ import {
   budgetSummary,
   euro,
   monthLabel,
+  nextMonth,
   parseMoney,
   today,
   validateState,
@@ -55,9 +61,12 @@ import {
   resetEverything,
   saveExpense,
   saveLine,
+  saveLineAmount,
+  removeLineAmount,
   savePayment,
   setSettled,
   confirmMonthlyIncomes,
+  saveMonthlyIncomes,
   uid,
 } from "./store";
 import { Backup, exportBackup, repository, storageLabel } from "./repository";
@@ -82,10 +91,12 @@ type View =
   | "settings";
 type Dialog =
   | { type: "line"; line?: BudgetLine; template?: BudgetLine }
+  | { type: "lineAmount"; lineId: string }
+  | { type: "trackingStart" }
   | { type: "expense"; lineId?: string; expense?: Expense }
   | { type: "payment"; memberId?: string; payment?: Payment }
   | { type: "close" }
-  | { type: "monthlyIncome" }
+  | { type: "monthlyIncome"; mode: "current" | "schedule" | "open" }
   | { type: "coach" }
   | { type: "potExpense"; expense?: PotExpense }
   | {
@@ -256,6 +267,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   }
   const actions: Actions = {
     line: (line) => open({ type: "line", line }),
+    amount: (line) => open({ type: "lineAmount", lineId: line.id }),
     expense: (lineId, expense) => open({ type: "expense", lineId, expense }),
     payment: (memberId, payment) =>
       open({ type: "payment", memberId, payment }),
@@ -288,7 +300,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
         (s) => setSettled(s, id, settled),
       ),
     close: () => open({ type: "close" }),
-    next: () => open({ type: "monthlyIncome" }),
+    next: () => open({ type: "monthlyIncome", mode: "open" }),
     potExpense: (expense) => open({ type: "potExpense", expense }),
     removePotExpense: (id) =>
       confirm(
@@ -535,6 +547,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             </section>
           ) : (
             <>
+              {view === "budget" && <TrackingStartPanel state={state} readOnly={readOnly} open={() => open({ type: "trackingStart" })} />}
               {view === "budget" && b.status === "ACTIVE" && (
                 <BudgetGuide
                   state={state}
@@ -551,7 +564,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     <div>
                       <h2>Votre budget mensuel</h2>
                       <p>
-                        Les montants prévus seront repris le mois suivant.
+                        Les montants habituels sont repris le mois suivant ; les exceptions restent limitées au mois choisi.
                         L’argent n’est considéré reçu qu’après saisie d’un
                         versement.
                       </p>
@@ -575,6 +588,12 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               )}
               {view === "payments" && (
                 <>
+                  <MonthlyIncomePanel
+                    state={state}
+                    readOnly={readOnly}
+                    edit={() => open({ type: "monthlyIncome", mode: "current" })}
+                    prepare={() => open({ type: "monthlyIncome", mode: "schedule" })}
+                  />
                   <Members budget={b} actions={actions} readOnly={readOnly} />
                   <Transactions budget={b} actions={actions} mode="payments" readOnly={readOnly} />
                 </>
@@ -590,7 +609,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                       modification ne change jamais un mois clôturé.
                     </p>
                     {readOnly ? (
-                      <dl>{state.members.map((member) => <div key={member.id}><dt>{member.name}</dt><dd>{euro(member.incomeCents)}</dd></div>)}</dl>
+                      <dl>{b.members.map((member) => <div key={member.id}><dt>{member.name}</dt><dd>{euro(member.incomeCents)}</dd></div>)}</dl>
                     ) : (
                     <HouseholdForm
                       state={state}
@@ -803,11 +822,46 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     ) as BudgetLine["expenseGroup"],
                     kind: String(data.get("kind")) as BudgetLine["kind"],
                     dueDay: day ? Number(day) : undefined,
-                  }),
+                  }, dialog.line ? { scope: String(data.get("amountScope")) as AmountScope } : undefined),
                 );
               })
             }
           />
+        </Modal>
+      )}
+      {!readOnly && dialog?.type === "lineAmount" && (() => {
+        const line = b.lines.find((entry) => entry.id === dialog.lineId);
+        if (!line) return null;
+        return (
+          <Modal title={`Montants par mois · ${line.name}`} close={closeDialog}>
+            {activeDialogError}
+            <EnvelopeAmountForm
+              line={line}
+              budgetMonth={b.id}
+              busy={busy}
+              submit={(data) => attempt(() => {
+                const amount = parseMoney(data.get("amount"), true);
+                void commit(
+                  (s) => saveLineAmount(s, line.id, amount, String(data.get("amountMonth")), String(data.get("amountScope")) as AmountScope),
+                  "Montant enregistré et contributions recalculées. Vous pouvez programmer un autre mois.",
+                );
+              })}
+              remove={(month, scope) => {
+                void commit((s) => removeLineAmount(s, line.id, month, scope), "Programmation retirée et contributions recalculées.");
+              }}
+            />
+          </Modal>
+        );
+      })()}
+      {!readOnly && dialog?.type === "trackingStart" && (
+        <Modal title="Démarrer le suivi après la préparation" close={closeDialog}>
+          {activeDialogError}
+          <TrackingStartForm state={state} busy={busy} submit={(data) => {
+            void submit(
+              (s) => startTrackingAtMonth(s, String(data.get("startMonth"))),
+              "Le suivi est démarré. Votre préparation est sauvegardée et ne compte pas dans les bilans.",
+            );
+          }} />
         </Modal>
       )}
       {!readOnly && dialog?.type === "expense" && (
@@ -902,21 +956,28 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
         </Modal>
       )}
       {!readOnly && dialog?.type === "monthlyIncome" && (
-        <Modal title="Les salaires de ce nouveau mois" close={closeDialog}>
+        <Modal title={`Salaires pour ${monthLabel(dialog.mode === "current" ? b.id : nextMonth(b.id))}`} close={closeDialog}>
           {activeDialogError}
           <MonthlyIncomeForm
             state={state}
             busy={busy}
+            mode={dialog.mode}
             submit={(data) =>
               attempt(() => {
                 const incomes = state.members.map((m) =>
                   parseMoney(data.get(`income-${m.id}`), true),
                 );
                 void submit(
-                  (s) => confirmMonthlyIncomes(s, incomes),
-                  "Salaires confirmés et nouveau mois préparé.",
+                  (s) => dialog.mode === "open"
+                    ? confirmMonthlyIncomes(s, incomes)
+                    : saveMonthlyIncomes(s, incomes, dialog.mode === "current" ? s.budget.id : nextMonth(s.budget.id)),
+                  dialog.mode === "current"
+                    ? "Salaires du mois enregistrés et contributions recalculées."
+                    : dialog.mode === "schedule"
+                      ? "Salaires du prochain mois enregistrés."
+                      : "Salaires confirmés et nouveau mois préparé.",
                 ).then((ok) => {
-                  if (ok) setView("dashboard");
+                  if (ok && dialog.mode === "open") setView("dashboard");
                 });
               })
             }

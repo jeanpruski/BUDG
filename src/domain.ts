@@ -16,10 +16,21 @@ const memberSchema = z.object({
   incomeCents: money,
 });
 const shareSchema = z.object({ memberId: id, amountCents: money });
+const amountPlanSchema = z.object({
+  baseCents: money,
+  changes: z.array(z.object({ fromMonth: monthSchema, amountCents: money })),
+  exceptions: z.array(z.object({ month: monthSchema, amountCents: money })),
+}).superRefine((plan, context) => {
+  if (new Set(plan.changes.map((change) => change.fromMonth)).size !== plan.changes.length)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Montants habituels dupliqués pour le même mois." });
+  if (new Set(plan.exceptions.map((exception) => exception.month)).size !== plan.exceptions.length)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Montants exceptionnels dupliqués pour le même mois." });
+});
 const lineSchema = z.object({
   id,
   name: z.string().trim().min(1).max(100),
   plannedCents: money,
+  amountPlan: amountPlanSchema.optional(),
   expenseGroup: z.enum(["HOUSING", "DAILY_LIFE"]),
   kind: z.enum(["FIXED", "VARIABLE", "RESERVE"]),
   allocationType: z.enum(["PRO_RATA", "FIFTY_FIFTY", "CUSTOM"]),
@@ -71,7 +82,7 @@ const budgetSchema = z.object({
   closedAt: z.string().optional(),
 });
 export const stateSchema = z.object({
-  version: z.literal(4),
+  version: z.literal(5),
   revision: z.number().int().nonnegative(),
   configured: z.boolean(),
   members: z.array(memberSchema).length(2),
@@ -85,6 +96,8 @@ export const stateSchema = z.object({
 export type Member = z.infer<typeof memberSchema>;
 export type Share = z.infer<typeof shareSchema>;
 export type BudgetLine = z.infer<typeof lineSchema>;
+export type AmountPlan = z.infer<typeof amountPlanSchema>;
+export type AmountScope = "MONTH" | "FROM_MONTH";
 export type Expense = z.infer<typeof expenseSchema>;
 export type PotExpense = z.infer<typeof potExpenseSchema>;
 export type Payment = z.infer<typeof paymentSchema>;
@@ -127,6 +140,19 @@ export const monthLabel = (month: string) =>
     month: "long",
     year: "numeric",
   });
+export function amountForMonth(
+  line: Pick<BudgetLine, "plannedCents" | "amountPlan">,
+  month: string,
+): number {
+  monthSchema.parse(month);
+  if (!line.amountPlan) return line.plannedCents;
+  const exception = line.amountPlan.exceptions.find((entry) => entry.month === month);
+  if (exception) return exception.amountCents;
+  const change = [...line.amountPlan.changes]
+    .filter((entry) => entry.fromMonth <= month)
+    .sort((left, right) => right.fromMonth.localeCompare(left.fromMonth))[0];
+  return change?.amountCents ?? line.amountPlan.baseCents;
+}
 export function nextMonth(month: string) {
   const [y, m] = month.split("-").map(Number);
   return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
@@ -347,12 +373,7 @@ export function budgetSummary(budget: Budget) {
 export function closeBudget(budget: Budget): Budget {
   if (budget.status === "CLOSED") return budget;
   const summary = budgetSummary(budget);
-  if (
-    !budget.lines.some(
-      (l) =>
-        l.plannedCents > 0 || l.openingShares.some((s) => s.amountCents > 0),
-    )
-  )
+  if (!budget.lines.length)
     throw new Error("Préparez au moins une enveloppe avant de clôturer.");
   if (summary.unpaidBills.length)
     throw new Error(
@@ -396,6 +417,10 @@ export function potSummary(state: AppState) {
   };
 }
 function migrateState(raw: unknown): unknown {
+  if (raw && typeof raw === "object" && "version" in raw && raw.version === 4) {
+    const legacy = stateSchema.extend({ version: z.literal(4) }).parse(raw);
+    return { ...legacy, version: 5 };
+  }
   if (
     !raw ||
     typeof raw !== "object" ||
@@ -431,7 +456,7 @@ function migrateState(raw: unknown): unknown {
   };
   return {
     ...legacy,
-    version: 4,
+    version: 5,
     budget: convert(legacy.budget),
     archivedBudgets: legacy.archivedBudgets.map(convert),
   };
@@ -464,6 +489,8 @@ export function validateState(raw: unknown): AppState {
       if (new Set(entries.map((e) => e.id)).size !== entries.length)
         throw new Error("Identifiants dupliqués.");
     for (const l of b.lines) {
+      if (l.amountPlan && l.plannedCents !== amountForMonth(l, b.id))
+        throw new Error("Le montant de l’enveloppe ne correspond pas à sa programmation pour ce mois.");
       for (const shares of [l.shares, l.openingShares])
         if (
           new Set(shares.map((x) => x.memberId)).size !== 2 ||

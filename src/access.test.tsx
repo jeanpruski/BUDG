@@ -3,12 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { BudgetGuide } from "./guide";
 import { MonthClosing } from "./MonthClosing";
 import { Actions, CommonPot, Dashboard, Envelopes, Members, Transactions } from "./screens";
-import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment } from "./store";
+import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, saveLineAmount, savePayment } from "./store";
 
 const actions: Actions = {
   expense: vi.fn(), payment: vi.fn(), line: vi.fn(), removeLine: vi.fn(),
   removeExpense: vi.fn(), removePayment: vi.fn(), settle: vi.fn(), close: vi.fn(),
-  next: vi.fn(), potExpense: vi.fn(), removePotExpense: vi.fn(),
+  next: vi.fn(), potExpense: vi.fn(), removePotExpense: vi.fn(), amount: vi.fn(),
 };
 let state = configureHousehold(initialState("2026-08"), ["Jean", "Miruna"], [300000, 200000], "2026-08");
 state = saveLine(state, { ...state.budget.lines.find((line) => line.id === "courses")!, plannedCents: 20000 });
@@ -45,7 +45,7 @@ describe("interface en lecture seule", () => {
       <Transactions budget={state.budget} actions={actions} mode="payments" readOnly />
       <CommonPot state={state} actions={actions} readOnly />
     </>);
-    expect(html).not.toMatch(/Ajouter une dépense|Ajouter un versement|Enregistrer un versement|Saisir un paiement|Utiliser le pot commun|Modifier l’opération|Supprimer l’opération/);
+    expect(html).not.toMatch(/Ajouter une dépense|Ajouter un versement|Enregistrer un versement|Saisir un paiement|Utiliser le pot commun|Modifier l’opération|Supprimer l’opération|Montants par mois/);
     expect(html).toContain('type="search"');
     expect(html).toContain("Filtrer par enveloppe");
     expect(html).not.toContain("disabled");
@@ -59,5 +59,15 @@ describe("interface en lecture seule", () => {
     expect(html).toContain("Comment ça marche");
     expect(html).not.toContain("<button");
     expect(html).toContain("guide-lessons");
+  });
+  it("reconnaît un mois à zéro préparé sans redemander de construire ou financer les enveloppes", () => {
+    let zero = configureHousehold(initialState("2026-11"), ["Camille", "Alex"], [300000, 200000], "2026-11");
+    zero = saveLine(zero, { ...zero.budget.lines[0], plannedCents: 100000 });
+    zero = saveLineAmount(zero, "credit", 0, "2026-11", "MONTH");
+    const html = renderToStaticMarkup(<BudgetGuide state={zero} actions={actions} prepare={vi.fn()} payments={vi.fn()} />);
+    expect(html).toContain("Rien à financer ce mois");
+    expect(html).toContain("Aucun versement attendu pour ce mois");
+    expect(html).toContain("Vérifier la clôture");
+    expect(html).not.toMatch(/On construit votre budget|Me guider pas à pas|Voir les contributions/);
   });
 });

@@ -33,6 +33,7 @@ export type Actions = {
   expense: (lineId?: string, expense?: Expense) => void;
   payment: (memberId?: string, payment?: Payment) => void;
   line: (line?: BudgetLine) => void;
+  amount?: (line: BudgetLine) => void;
   removeLine: (id: string) => void;
   removeExpense: (id: string) => void;
   removePayment: (id: string) => void;
@@ -149,6 +150,7 @@ export function Envelopes({
               .map((l) => {
                 const late =
                   l.kind === "FIXED" &&
+                  l.capacity > 0 &&
                   !l.settled &&
                   l.dueDay &&
                   `${budget.id}-${String(Math.min(l.dueDay, new Date(Number(budget.id.slice(0, 4)), Number(budget.id.slice(5)), 0).getDate())).padStart(2, "0")}` <
@@ -180,6 +182,8 @@ export function Envelopes({
                             ? "À consommer"
                             : l.settled
                               ? "Facture réglée"
+                              : l.capacity === 0
+                                ? "Rien à financer ce mois"
                               : late
                                 ? "Échéance dépassée"
                                 : "Facture à régler"}
@@ -195,6 +199,9 @@ export function Envelopes({
                           )
                           .join("")}
                     </p>
+                    {l.amountPlan && (l.amountPlan.changes.some((entry) => entry.fromMonth > budget.id) || l.amountPlan.exceptions.some((entry) => entry.month >= budget.id)) && (
+                      <p className="hint">Des montants spécifiques sont programmés par mois.</p>
+                    )}
                     <div className="envelope-amount">
                       <strong className={l.available < 0 ? "text-red" : ""}>
                         {euro(l.available)}
@@ -267,6 +274,7 @@ export function Envelopes({
                     )}
                     {!readOnly && !closed && (
                       <div className="actions">
+                        {!compact && actions.amount && <button className="secondary" onClick={() => actions.amount?.(l)} aria-label={`Montants par mois · ${l.name}`}>Montants par mois</button>}
                         <button
                           className="secondary"
                           onClick={() => actions.expense(l.id)}
@@ -296,7 +304,7 @@ export function Envelopes({
                         )}
                       </div>
                     )}
-                    {!readOnly && !compact && !closed && l.kind === "FIXED" && (
+                    {!readOnly && !compact && !closed && l.kind === "FIXED" && l.capacity > 0 && (
                       <button
                         className="text-button"
                         onClick={() => actions.settle(l.id, !l.settled)}

@@ -11,7 +11,9 @@ import { readConfig, databaseConfig } from "./config";
 import { hashPassword, verifyPassword } from "./security";
 import { captureMonthlyArchives, saveBudget, type PublicUser } from "./storage";
 import { flushMonthlyArchives } from "./jobs";
-import { closeMonth, configureHousehold, initialState, resetEverything, saveExpense, saveLine, savePayment, startNextMonth } from "../src/store";
+import { closeMonth, configureHousehold, initialState, resetEverything, saveExpense, saveLine, saveLineAmount, savePayment, startNextMonth } from "../src/store";
+import { accountBalance, amountForMonth, potSummary } from "../src/domain";
+import { startTrackingAtMonth } from "../src/budgetStart";
 
 describe("configuration et mots de passe", () => {
   it("exige HTTPS et un dossier privé de sauvegardes en production", () => {
@@ -82,6 +84,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     await admin.query(`CREATE SCHEMA ${schema}`);
     pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${schema}`, max: 5 });
     await pool.query(await readFile(join(process.cwd(), "server/migrations/001_online.sql"), "utf8"));
+    await pool.query(await readFile(join(process.cwd(), "server/migrations/002_amount_plans.sql"), "utf8"));
     passwordHash = await hashPassword(password);
     privateDir = await mkdtemp(join(tmpdir(), "budg-api-test-"));
     const distDir = join(privateDir, "dist");
@@ -177,6 +180,84 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     const results = await Promise.all([1, 2].map(() => request("/api/budget", "PUT", { state: budget(), expectedRevision: 0 }, auth)));
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
     expect((await pool.query("SELECT revision FROM budg_state")).rows[0].revision).toBe("1");
+  });
+  it("démarre novembre en conservant la préparation d’octobre sans créer de mouvements ni clôture comptable", async () => {
+    const auth = await login(), viewerAuth = await login(viewer);
+    let preparation = configureHousehold(initialState("2026-10"), ["Camille", "Alex"], [300000, 200000], "2026-10");
+    preparation = saveLine(preparation, { ...preparation.budget.lines[0], plannedCents: 100000 });
+    const response = await request("/api/budget", "PUT", { state: preparation, expectedRevision: 0 }, auth);
+    expect(response.status).toBe(200);
+    const previous = (await response.json()).state;
+    // Simulate the provisional archive from the first of November without altering I/O timers.
+    await captureMonthlyArchives(pool, null, previous, { now: new Date("2026-11-03T12:00:00Z"), timeZone: "Europe/Paris" });
+    const provisional = (await pool.query("SELECT snapshot FROM budg_monthly_archives WHERE month='2026-10'")).rows[0].snapshot;
+    let next;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
+      next = startTrackingAtMonth(previous, "2026-11");
+    } finally { vi.useRealTimers(); }
+    expect((await request("/api/budget", "PUT", { state: next, expectedRevision: previous.revision }, viewerAuth)).status).toBe(403);
+    const savedResponse = await request("/api/budget", "PUT", { state: next, expectedRevision: previous.revision }, auth);
+    expect(savedResponse.status).toBe(200);
+    const saved = (await savedResponse.json()).state;
+    expect(saved.budget).toMatchObject({ id: "2026-11", status: "ACTIVE", payments: [], expenses: [], refunds: [], closedPotCents: 0 });
+    expect(saved.archivedBudgets).toEqual([]);
+    expect(saved.budget.lines).toEqual(next.budget.lines);
+    expect(accountBalance(saved)).toBe(0);
+    expect(potSummary(saved).availableCents).toBe(0);
+    const backups = (await (await request("/api/backups", "GET", undefined, auth)).json()).backups;
+    expect(backups).toHaveLength(1);
+    expect(backups[0].state).toEqual(previous);
+    expect((await pool.query("SELECT count(*) FROM budg_audit")).rows[0].count).toBe("0");
+    const archive = (await pool.query("SELECT snapshot,finalized FROM budg_monthly_archives WHERE month='2026-10'")).rows[0];
+    expect(archive.finalized).toBe(false);
+    expect(archive.snapshot).toEqual(provisional);
+    expect((await pool.query("SELECT count(*) FROM budg_monthly_archives WHERE finalized")).rows[0].count).toBe("0");
+  });
+  it("conserve les exceptions et montants habituels après un aller-retour JSON via l’API", async () => {
+    const auth = await login();
+    let state = configureHousehold(initialState("2026-11"), ["Camille", "Alex"], [300000, 200000], "2026-11");
+    state = saveLine(state, { ...state.budget.lines[0], plannedCents: 95000 });
+    state = saveLineAmount(state, "credit", 0, "2026-11", "MONTH");
+    state = saveLineAmount(state, "credit", 125432, "2026-12", "MONTH");
+    state = saveLineAmount(state, "credit", 95000, "2027-01", "FROM_MONTH");
+    const response = await request("/api/budget", "PUT", { state, expectedRevision: 0 }, auth);
+    expect(response.status).toBe(200);
+    const saved = (await response.json()).state;
+    const loaded = (await (await request("/api/budget", "GET", undefined, auth)).json()).state;
+    expect(loaded).toEqual(saved);
+    expect(loaded.version).toBe(5);
+    const line = loaded.budget.lines.find((entry: { id: string }) => entry.id === "credit");
+    expect(["2026-11", "2026-12", "2027-01", "2027-02"].map((month) => amountForMonth(line, month))).toEqual([0, 125432, 95000, 95000]);
+    expect(line.plannedCents).toBe(0);
+    expect(line.shares.map((entry: { amountCents: number }) => entry.amountCents)).toEqual([0, 0]);
+    expect((await pool.query("SELECT count(*) FROM budg_audit")).rows[0].count).toBe("0");
+    const invalid = { ...loaded, budget: { ...loaded.budget, lines: loaded.budget.lines.map((entry: { id: string }) => entry.id === "credit" ? { ...entry, plannedCents: 95000 } : entry) } };
+    expect((await request("/api/budget", "PUT", { state: invalid, expectedRevision: loaded.revision }, auth)).status).toBe(422);
+    expect((await (await request("/api/budget", "GET", undefined, auth)).json()).state).toEqual(loaded);
+  });
+  it("élargit le format SQL sans réécrire les données V4 et reste idempotent", async () => {
+    const legacy = { ...budget(), version: 4, revision: 1 };
+    const backupId = randomUUID();
+    await pool.query("INSERT INTO budg_state(id,revision,data) VALUES(1,1,$1)", [JSON.stringify(legacy)]);
+    await pool.query("INSERT INTO budg_backups(id,revision,data) VALUES($1,1,$2)", [backupId, JSON.stringify(legacy)]);
+    const beforeState = (await pool.query("SELECT revision,data,updated_at FROM budg_state")).rows;
+    const beforeBackups = (await pool.query("SELECT id,revision,data,created_at FROM budg_backups")).rows;
+    for (let i = 0; i < 2; i++) {
+      await pool.query(await readFile(join(process.cwd(), "server/migrations/001_online.sql"), "utf8"));
+      await pool.query(await readFile(join(process.cwd(), "server/migrations/002_amount_plans.sql"), "utf8"));
+    }
+    expect((await pool.query("SELECT revision,data,updated_at FROM budg_state")).rows).toEqual(beforeState);
+    expect((await pool.query("SELECT id,revision,data,created_at FROM budg_backups")).rows).toEqual(beforeBackups);
+    const auth = await login();
+    const upgraded = (await (await request("/api/budget", "GET", undefined, auth)).json()).state;
+    expect(upgraded.version).toBe(5);
+    expect(upgraded.budget).toEqual(legacy.budget);
+    expect((await pool.query("SELECT data->>'version' AS version FROM budg_state")).rows[0].version).toBe("4");
+    await expect(pool.query("UPDATE budg_state SET data=jsonb_set(data,'{version}','6'::jsonb)")).rejects.toMatchObject({ code: "23514" });
+    expect((await request("/api/budget", "PUT", { state: upgraded, expectedRevision: 1 }, auth)).status).toBe(200);
+    expect((await pool.query("SELECT data->>'version' AS version FROM budg_state")).rows[0].version).toBe("5");
   });
   it("trace création, correction, suppression et ne retrace pas un passage aux archives", async () => {
     let state = saveLine(budget(), { id: "courses", name: "Courses", plannedCents: 20000, expenseGroup: "DAILY_LIFE", kind: "VARIABLE" });

@@ -27,6 +27,8 @@ Le serveur prépare une version séparée, y installe les dépendances de produc
 
 Le retour automatique concerne le code. Il ne restaure ni n’efface la base de données. Les migrations doivent donc rester compatibles avec la version précédente et préserver les données existantes. Une migration destructive nécessite un traitement séparé ; elle ne doit pas être ajoutée à une mise à jour courante.
 
+La migration `002_amount_plans.sql` élargit la contrainte de version aux formats 4 et 5 sans modifier les lignes existantes. Le format 5 conserve les montants programmés par mois ; les données et sauvegardes des formats 3/4 sont converties à la lecture. Après la première écriture au format 5, un ancien client ou serveur limité au format 4 refuse ce budget pour éviter de perdre ses programmations. Un retour à un code antérieur au support du format 5 ne suffit donc pas après cette écriture : conserver les données et utiliser une version compatible, sans restaurer automatiquement une ancienne sauvegarde.
+
 Le déploiement ne crée pas de comptes, n’importe pas de budget et ne lance pas une sauvegarde quotidienne forcée. Les sessions, les droits de Jean et Miruna, le Cron et les sauvegardes sont conservés.
 
 Le dossier `budg-app/current` désigne la version active. Les chemins `dist` et `server-dist` suivent ce lien, ce qui conserve la commande Cron existante. Seules la version active et la précédente sont gardées sur disque. Le bootstrap stable et le relais `maintenance.cjs` restent en place pour N0C/LiteSpeed.
