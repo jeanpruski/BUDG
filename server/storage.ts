@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import { validateState, type AppState } from "../src/domain";
 import { captureReportEmails } from "./reportQueue";
@@ -7,8 +8,9 @@ export type PublicUser = { id: string; email: string; displayName: string; role:
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-type AuditEntity = { type: "expense" | "payment" | "potExpense"; month: string; id: string; value: unknown };
+type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer"; month: string; id: string; value: unknown };
 export type MonthlyCaptureOptions = { timeZone?: string; now?: Date };
+type SaveOptions = MonthlyCaptureOptions & { allowHistoryRewrite?: boolean };
 function financialEntities(state: AppState | null): Map<string, AuditEntity> {
   const result = new Map<string, AuditEntity>();
   if (!state) return result;
@@ -16,6 +18,7 @@ function financialEntities(state: AppState | null): Map<string, AuditEntity> {
   for (const month of [state.budget, ...state.archivedBudgets]) {
     for (const value of month.expenses) add({ type: "expense", month: month.id, id: value.id, value });
     for (const value of month.payments) add({ type: "payment", month: month.id, id: value.id, value });
+    for (const value of month.potTransfers) add({ type: "potTransfer", month: month.id, id: value.id, value });
   }
   for (const value of state.potExpenses)
     add({ type: "potExpense", month: value.date.slice(0, 7), id: value.id, value });
@@ -77,7 +80,23 @@ export async function captureMonthlyArchives(
   return queued;
 }
 
-export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: number, actor: PublicUser, options: MonthlyCaptureOptions = {}): Promise<AppState> {
+/** Ordinary edits preserve closed internal movements; explicit restores retain their audit trail. */
+function checkClosedPotMovements(before: AppState, after: AppState) {
+  const months = new Map([after.budget, ...after.archivedBudgets].map((month) => [month.id, month]));
+  const movements = (budget: AppState["budget"]) => ({
+    transfers: [...budget.potTransfers].sort((a, b) => a.id.localeCompare(b.id)),
+    openings: budget.lines.filter((line) => line.openingPotCents > 0)
+      .map((line) => ({ id: line.id, amountCents: line.openingPotCents })).sort((a, b) => a.id.localeCompare(b.id)),
+  });
+  for (const month of [before.budget, ...before.archivedBudgets]) {
+    if (month.status !== "CLOSED") continue;
+    const next = months.get(month.id);
+    if (next ? !isDeepStrictEqual(movements(month), movements(next)) : month.potTransfers.length || month.lines.some((line) => line.openingPotCents > 0))
+      throw new ApiError(422, "Les transferts d’un mois clôturé sont verrouillés. Utilisez une restauration explicite pour revenir à une sauvegarde.");
+  }
+}
+
+export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: number, actor: PublicUser, options: SaveOptions = {}): Promise<AppState> {
   if (actor.role !== "editor") throw new ApiError(403, "Ce compte dispose d’un accès en lecture seule.");
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER)
     throw new ApiError(422, "Révision de sauvegarde invalide.");
@@ -98,6 +117,7 @@ export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: num
     if (Number(row?.revision || 0) !== expectedRevision)
       throw new ApiError(409, "Le budget a changé sur un autre appareil. Rechargez-le avant de continuer.");
     const before = row ? validateState(row.data) : null;
+    if (before && !options.allowHistoryRewrite) checkClosedPotMovements(before, next);
     if (before) await client.query(
       "INSERT INTO budg_backups(id,revision,data) VALUES ($1,$2,$3::jsonb)",
       [randomUUID(), before.revision, JSON.stringify(before)],

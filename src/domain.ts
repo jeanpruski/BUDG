@@ -40,6 +40,7 @@ const lineSchema = z.object({
     .optional(),
   shares: z.array(shareSchema).length(2),
   openingShares: z.array(shareSchema).length(2),
+  openingPotCents: money.default(0),
   settled: z.boolean(),
   dueDay: z.number().int().min(1).max(31).optional(),
 });
@@ -68,6 +69,13 @@ const potExpenseSchema = z.object({
   date: dateSchema,
   description: z.string().trim().min(1).max(200),
 });
+const potTransferSchema = z.object({
+  id,
+  lineId: id,
+  amountCents: money.positive(),
+  date: dateSchema,
+  note: z.string().trim().max(200),
+});
 const budgetSchema = z.object({
   id: monthSchema,
   label: z.string(),
@@ -76,13 +84,14 @@ const budgetSchema = z.object({
   lines: z.array(lineSchema),
   expenses: z.array(expenseSchema),
   payments: z.array(paymentSchema),
+  potTransfers: z.array(potTransferSchema).default([]),
   // Already executed transfers from the previous version are preserved as history.
   refunds: z.array(refundSchema),
   closedPotCents: money.default(0),
   closedAt: z.string().optional(),
 });
 export const stateSchema = z.object({
-  version: z.literal(5),
+  version: z.literal(6),
   revision: z.number().int().nonnegative(),
   configured: z.boolean(),
   members: z.array(memberSchema).length(2),
@@ -100,6 +109,7 @@ export type AmountPlan = z.infer<typeof amountPlanSchema>;
 export type AmountScope = "MONTH" | "FROM_MONTH";
 export type Expense = z.infer<typeof expenseSchema>;
 export type PotExpense = z.infer<typeof potExpenseSchema>;
+export type PotTransfer = z.infer<typeof potTransferSchema>;
 export type Payment = z.infer<typeof paymentSchema>;
 export type Budget = z.infer<typeof budgetSchema>;
 export type AppState = z.infer<typeof stateSchema>;
@@ -275,31 +285,43 @@ export function budgetSummary(budget: Budget) {
     const capacityShares = ids.map(
       (id) => owned(line.shares, id) + owned(line.openingShares, id),
     );
-    const opening = sum(line.openingShares.map((s) => s.amountCents));
-    const capacity = line.plannedCents + opening;
+    const personalOpening = sum(line.openingShares.map((s) => s.amountCents));
+    const personalCapacityCents = line.plannedCents + personalOpening;
+    const potAddedCents = sum(budget.potTransfers.filter((transfer) => transfer.lineId === line.id).map((transfer) => transfer.amountCents));
+    const potFunding = line.openingPotCents + potAddedCents;
+    const opening = personalOpening + line.openingPotCents;
+    const capacity = personalCapacityCents + potFunding;
     const weights =
-      capacity > 0
+      personalCapacityCents > 0
         ? capacityShares
         : allocationWeights(
             line.allocationType,
             members,
             line.customPercentages,
           );
-    const costs = splitAmount(spent, weights, ids);
+    // Monthly personal provisions stay due. The common pot covers only spending
+    // beyond personal capacity, before any additional personal contribution.
+    const potSpentCents = Math.min(potFunding, Math.max(0, spent - personalCapacityCents));
+    const costs = splitAmount(spent - potSpentCents, weights, ids);
     const reservedShares = capacityShares.map((n, i) =>
       line.kind === "RESERVE" ? Math.max(0, n - costs[i]) : 0,
     );
-    const funded = opening + sum(ids.map((id) => funding[id][index]));
+    const reservedPotCents = line.kind === "RESERVE" ? potFunding - potSpentCents : 0;
+    const funded = opening + potAddedCents + sum(ids.map((id) => funding[id][index]));
     return {
       ...line,
       spent,
       opening,
       capacity,
+      personalCapacityCents,
+      potAddedCents,
+      potSpentCents,
       funded,
       available: funded - spent,
       remaining: capacity - spent,
       costs,
       reservedShares,
+      reservedPotCents,
     };
   });
   // Complements beyond the planned contribution first fund this member's overruns.
@@ -351,8 +373,9 @@ export function budgetSummary(budget: Budget) {
     sum(Object.values(paid)) +
     sum(lines.map((l) => l.opening)) -
     spentCents -
-    refundedCents;
-  const reservedCents = sum(lines.flatMap((l) => l.reservedShares));
+    refundedCents +
+    sum(budget.potTransfers.map((transfer) => transfer.amountCents));
+  const reservedCents = sum(lines.flatMap((l) => l.reservedShares)) + sum(lines.map((line) => line.reservedPotCents));
   const unpaidBills = lines.filter(
     (l) => l.kind === "FIXED" && l.capacity > 0 && !l.settled,
   );
@@ -365,6 +388,7 @@ export function budgetSummary(budget: Budget) {
     spentCents,
     cashCents,
     reservedCents,
+    potTransferredCents: sum(budget.potTransfers.map((transfer) => transfer.amountCents)),
     unpaidBills,
     missingCents: sum(balances.map((m) => m.remaining)),
     surplusCents: Math.max(0, cashCents - reservedCents),
@@ -409,32 +433,36 @@ export function potSummary(state: AppState) {
   );
   const receivedCents = sum(credits.map((b) => b.closedPotCents));
   const spentCents = sum(state.potExpenses.map((e) => e.amountCents));
+  const transferredCents = sum([state.budget, ...state.archivedBudgets].flatMap((budget) => budget.potTransfers.map((transfer) => transfer.amountCents)));
   return {
     credits,
     receivedCents,
     spentCents,
-    availableCents: receivedCents - spentCents,
+    transferredCents,
+    availableCents: receivedCents - spentCents - transferredCents,
   };
 }
 function migrateState(raw: unknown): unknown {
-  if (raw && typeof raw === "object" && "version" in raw && raw.version === 4) {
-    const legacy = stateSchema.extend({ version: z.literal(4) }).parse(raw);
-    return { ...legacy, version: 5 };
-  }
   if (
     !raw ||
     typeof raw !== "object" ||
     !("version" in raw) ||
-    raw.version !== 3
+    ![3, 4, 5].includes(Number(raw.version))
   )
     return raw;
+  const legacyLineSchema = lineSchema.omit({ openingPotCents: true });
+  const legacyBudgetSchema = budgetSchema.omit({ potTransfers: true }).extend({ lines: z.array(legacyLineSchema) });
   const legacy = stateSchema
     .extend({
-      version: z.literal(3),
+      version: z.union([z.literal(3), z.literal(4), z.literal(5)]),
+      budget: legacyBudgetSchema,
+      archivedBudgets: z.array(legacyBudgetSchema),
       potExpenses: z.array(potExpenseSchema).default([]),
     })
     .parse(raw);
-  const convert = (b: Budget): Budget => {
+  const convert = (old: z.infer<typeof legacyBudgetSchema>): Budget => {
+    const b: Budget = { ...old, potTransfers: [], lines: old.lines.map((line) => ({ ...line, openingPotCents: 0 })) };
+    if (legacy.version !== 3) return b;
     if (b.status !== "CLOSED") return { ...b, closedPotCents: 0 };
     const summary = budgetSummary(b);
     if (
@@ -456,7 +484,7 @@ function migrateState(raw: unknown): unknown {
   };
   return {
     ...legacy,
-    version: 5,
+    version: 6,
     budget: convert(legacy.budget),
     archivedBudgets: legacy.archivedBudgets.map(convert),
   };
@@ -485,7 +513,7 @@ export function validateState(raw: unknown): AppState {
       new Set(b.members.map((m) => m.id)).size !== 2
     )
       throw new Error("Membres du mois invalides.");
-    for (const entries of [b.lines, b.expenses, b.payments])
+    for (const entries of [b.lines, b.expenses, b.payments, b.potTransfers])
       if (new Set(entries.map((e) => e.id)).size !== entries.length)
         throw new Error("Identifiants dupliqués.");
     for (const l of b.lines) {
@@ -515,7 +543,7 @@ export function validateState(raw: unknown): AppState {
         throw new Error(
           "Les parts ne correspondent pas à la règle de répartition.",
         );
-      if (l.kind !== "RESERVE" && l.openingShares.some((x) => x.amountCents))
+      if (l.kind !== "RESERVE" && (l.openingShares.some((x) => x.amountCents) || l.openingPotCents > 0))
         throw new Error("Report réservé à une enveloppe de réserve.");
     }
     if (
@@ -526,6 +554,10 @@ export function validateState(raw: unknown): AppState {
         (e) =>
           !b.lines.some((l) => l.id === e.lineId) ||
           e.date.slice(0, 7) !== b.id,
+      ) ||
+      b.potTransfers.some((transfer) =>
+        transfer.date.slice(0, 7) !== b.id || transfer.date > today() ||
+        !b.lines.some((line) => line.id === transfer.lineId),
       )
     )
       throw new Error(
@@ -567,6 +599,8 @@ export function validateState(raw: unknown): AppState {
     const previousLines = previous ? budgetSummary(previous).lines : [];
     for (const line of budget.lines) {
       const prior = previousLines.find((l) => l.id === line.id);
+      if (line.openingPotCents !== (prior?.reservedPotCents ?? 0))
+        throw new Error("Réserve commune reportée incohérente.");
       for (const share of line.openingShares) {
         const memberIndex =
           previous?.members.findIndex((m) => m.id === share.memberId) ?? -1;
@@ -579,7 +613,7 @@ export function validateState(raw: unknown): AppState {
     if (
       previousLines.some(
         (l) =>
-          l.reservedShares.some((n) => n > 0) &&
+          (l.reservedShares.some((n) => n > 0) || l.reservedPotCents > 0) &&
           !budget.lines.some((current) => current.id === l.id),
       )
     )
@@ -589,13 +623,23 @@ export function validateState(raw: unknown): AppState {
     throw new Error("Dépenses du pot commun dupliquées.");
   if (potSummary(s).availableCents < 0)
     throw new Error("Le montant dépasse le pot commun disponible.");
+  // A month's transfers must be funded by earlier months, never by the
+  // surplus they themselves return when that month closes.
+  for (const budget of chronological) {
+    const priorCredits = sum(chronological.filter((month) => month.status === "CLOSED" && month.id < budget.id).map((month) => month.closedPotCents));
+    const transfersThroughMonth = sum(chronological.filter((month) => month.id <= budget.id).flatMap((month) => month.potTransfers.map((transfer) => transfer.amountCents)));
+    const earlierPotSpending = sum(s.potExpenses.filter((expense) => expense.date.slice(0, 7) < budget.id).map((expense) => expense.amountCents));
+    if (budget.potTransfers.length && transfersThroughMonth + earlierPotSpending > priorCredits)
+      throw new Error("Le pot commun des mois précédents ne suffit pas à financer ces transferts.");
+  }
   for (const expense of s.potExpenses) {
     const credits = budgets.filter(
       (b) => b.status === "CLOSED" && b.id <= expense.date.slice(0, 7),
     );
     const spending = s.potExpenses.filter((e) => e.date <= expense.date);
+    const transferred = budgets.flatMap((budget) => budget.potTransfers).filter((transfer) => transfer.date <= expense.date);
     if (
-      sum(spending.map((e) => e.amountCents)) >
+      sum(spending.map((e) => e.amountCents)) + sum(transferred.map((transfer) => transfer.amountCents)) >
       sum(credits.map((b) => b.closedPotCents))
     )
       throw new Error(

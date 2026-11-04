@@ -5,9 +5,9 @@ export function trackingStartBlockReason(state: AppState): string | null {
   if (!state.configured) return "Préparez d’abord votre foyer et vos enveloppes.";
   if (state.budget.status !== "ACTIVE" || state.archivedBudgets.length)
     return "Le suivi a déjà commencé. Les mois suivis doivent être clôturés normalement.";
-  if (state.budget.payments.length || state.budget.expenses.length || state.budget.refunds.length || state.potExpenses.length)
+  if (state.budget.payments.length || state.budget.expenses.length || state.budget.refunds.length || state.budget.potTransfers.length || state.potExpenses.length)
     return "Des opérations ont été enregistrées. Elles doivent être conservées dans leur mois d’origine.";
-  if (state.budget.closedPotCents || state.budget.lines.some((line) => line.openingShares.some((share) => share.amountCents > 0)))
+  if (state.budget.closedPotCents || state.budget.lines.some((line) => line.openingPotCents > 0 || line.openingShares.some((share) => share.amountCents > 0)))
     return "Un solde ou une réserve existe déjà. Il doit être conservé dans le suivi.";
   return null;
 }

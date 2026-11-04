@@ -11,9 +11,9 @@ import * as reportDelivery from "./reportDelivery";
 import { readConfig, databaseConfig } from "./config";
 import { hashPassword, verifyPassword } from "./security";
 import { captureMonthlyArchives, saveBudget, type PublicUser } from "./storage";
-import { flushMonthlyArchives } from "./jobs";
-import { closeMonth, configureHousehold, initialState, resetEverything, saveExpense, saveLine, saveLineAmount, savePayment, startNextMonth } from "../src/store";
-import { accountBalance, amountForMonth, potSummary } from "../src/domain";
+import { flushMonthlyArchives, parseServerSnapshot, restoreDisasterSnapshot } from "./jobs";
+import { closeMonth, configureHousehold, initialState, removePotTransfer, resetEverything, saveExpense, saveLine, saveLineAmount, savePayment, savePotTransfer, startNextMonth } from "../src/store";
+import { accountBalance, amountForMonth, budgetSummary, potSummary } from "../src/domain";
 import { startTrackingAtMonth } from "../src/budgetStart";
 
 describe("configuration et mots de passe", () => {
@@ -80,6 +80,14 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     const configured = configureHousehold(initialState("2026-08"), ["Jean", "Miruna"], [300000, 200000], "2026-08");
     return { ...configured, budget: { ...configured.budget, lines: [] } };
   }
+  function withPot() {
+    let state = saveLine(budget(), { id: "courses", name: "Courses", plannedCents: 50000, expenseGroup: "DAILY_LIFE", kind: "VARIABLE" });
+    for (const member of budgetSummary(state.budget).balances) state = savePayment(state, {
+      id: `initial-${member.id}`, memberId: member.id, amountCents: member.remaining, date: "2026-08-01", note: "Contribution du mois précédent",
+    });
+    state = startNextMonth(closeMonth(state));
+    return saveLine(state, { id: "vacances", name: "Vacances", plannedCents: 60000, expenseGroup: "DAILY_LIFE", kind: "RESERVE" });
+  }
   beforeAll(async () => {
     admin = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -87,6 +95,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     await pool.query(await readFile(join(process.cwd(), "server/migrations/001_online.sql"), "utf8"));
     await pool.query(await readFile(join(process.cwd(), "server/migrations/002_amount_plans.sql"), "utf8"));
     await pool.query(await readFile(join(process.cwd(), "server/migrations/003_email_reports.sql"), "utf8"));
+    await pool.query(await readFile(join(process.cwd(), "server/migrations/004_pot_transfers.sql"), "utf8"));
     passwordHash = await hashPassword(password);
     privateDir = await mkdtemp(join(tmpdir(), "budg-api-test-"));
     const distDir = join(privateDir, "dist");
@@ -229,7 +238,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     const saved = (await response.json()).state;
     const loaded = (await (await request("/api/budget", "GET", undefined, auth)).json()).state;
     expect(loaded).toEqual(saved);
-    expect(loaded.version).toBe(5);
+    expect(loaded.version).toBe(6);
     const line = loaded.budget.lines.find((entry: { id: string }) => entry.id === "credit");
     expect(["2026-11", "2026-12", "2027-01", "2027-02"].map((month) => amountForMonth(line, month))).toEqual([0, 125432, 95000, 95000]);
     expect(line.plannedCents).toBe(0);
@@ -249,17 +258,24 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     for (let i = 0; i < 2; i++) {
       await pool.query(await readFile(join(process.cwd(), "server/migrations/001_online.sql"), "utf8"));
       await pool.query(await readFile(join(process.cwd(), "server/migrations/002_amount_plans.sql"), "utf8"));
+      await pool.query(await readFile(join(process.cwd(), "server/migrations/004_pot_transfers.sql"), "utf8"));
     }
     expect((await pool.query("SELECT revision,data,updated_at FROM budg_state")).rows).toEqual(beforeState);
     expect((await pool.query("SELECT id,revision,data,created_at FROM budg_backups")).rows).toEqual(beforeBackups);
     const auth = await login();
     const upgraded = (await (await request("/api/budget", "GET", undefined, auth)).json()).state;
-    expect(upgraded.version).toBe(5);
+    expect(upgraded.version).toBe(6);
     expect(upgraded.budget).toEqual(legacy.budget);
     expect((await pool.query("SELECT data->>'version' AS version FROM budg_state")).rows[0].version).toBe("4");
-    await expect(pool.query("UPDATE budg_state SET data=jsonb_set(data,'{version}','6'::jsonb)")).rejects.toMatchObject({ code: "23514" });
+    await expect(pool.query("UPDATE budg_state SET data=jsonb_set(data,'{version}','7'::jsonb)")).rejects.toMatchObject({ code: "23514" });
     expect((await request("/api/budget", "PUT", { state: upgraded, expectedRevision: 1 }, auth)).status).toBe(200);
-    expect((await pool.query("SELECT data->>'version' AS version FROM budg_state")).rows[0].version).toBe("5");
+    expect((await pool.query("SELECT data->>'version' AS version FROM budg_state")).rows[0].version).toBe("6");
+    const written = (await pool.query("SELECT revision,data,updated_at FROM budg_state")).rows;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const migration of ["001_online.sql", "002_amount_plans.sql", "003_email_reports.sql", "004_pot_transfers.sql"])
+        await pool.query(await readFile(join(process.cwd(), "server/migrations", migration), "utf8"));
+    }
+    expect((await pool.query("SELECT revision,data,updated_at FROM budg_state")).rows).toEqual(written);
   });
   it("trace création, correction, suppression et ne retrace pas un passage aux archives", async () => {
     let state = saveLine(budget(), { id: "courses", name: "Courses", plannedCents: 20000, expenseGroup: "DAILY_LIFE", kind: "VARIABLE" });
@@ -276,6 +292,70 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     await saveBudget(pool, resetEverything(state), state.revision, editor);
     const actions = (await pool.query("SELECT action FROM budg_audit ORDER BY id")).rows.map((r) => r.action);
     expect(actions).toEqual(["added", "updated", "added", "deleted", "deleted"]);
+  });
+  it("trace et arbitre les transferts internes puis leur annulation sans toucher au solde bancaire", async () => {
+    const auth = await login(), viewerAuth = await login(viewer);
+    const before = await saveBudget(pool, withPot(), 0, editor);
+    const bank = accountBalance(before);
+    const next = savePotTransfer(before, { id: "top-up", lineId: "vacances", amountCents: 20000, date: "2026-09-02", note: "Complément ponctuel" });
+    expect((await request("/api/budget", "PUT", { state: next, expectedRevision: before.revision }, viewerAuth)).status).toBe(403);
+    expect((await request("/api/budget", "PUT", { state: next, expectedRevision: before.revision, intent: "other" }, auth)).status).toBe(422);
+    const responses = await Promise.all([1, 2].map(() => request("/api/budget", "PUT", { state: next, expectedRevision: before.revision }, auth)));
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const saved = (await responses.find((response) => response.status === 200)!.json()).state;
+    expect(accountBalance(saved)).toBe(bank);
+    expect(potSummary(saved).availableCents).toBe(30000);
+    expect(budgetSummary(saved.budget).missingCents).toBe(budgetSummary(before.budget).missingCents);
+    const cancelled = removePotTransfer(saved, "top-up");
+    const response = await request("/api/budget", "PUT", { state: cancelled, expectedRevision: saved.revision }, auth);
+    expect(response.status).toBe(200);
+    const after = (await response.json()).state;
+    expect(accountBalance(after)).toBe(bank);
+    expect(potSummary(after).availableCents).toBe(50000);
+    const audit = (await pool.query("SELECT actor_email,entity_month,entity_id,action,before_data,after_data FROM budg_audit WHERE entity_type='potTransfer' ORDER BY id")).rows;
+    expect(audit.map((entry) => entry.action)).toEqual(["added", "deleted"]);
+    expect(audit.every((entry) => entry.actor_email === editor.email && entry.entity_month === "2026-09" && entry.entity_id === "top-up")).toBe(true);
+    expect(audit[0].after_data).toEqual(next.budget.potTransfers[0]);
+    expect(audit[1].before_data).toEqual(next.budget.potTransfers[0]);
+    const backups = (await (await request("/api/backups", "GET", undefined, auth)).json()).backups;
+    expect(backups[0].state.budget.potTransfers).toEqual(next.budget.potTransfers);
+  });
+  it("verrouille les transferts clôturés et accepte une restauration explicite auditée réservée à l’éditeur", async () => {
+    const auth = await login(), viewerAuth = await login(viewer);
+    let source = savePotTransfer(withPot(), { id: "top-up", lineId: "vacances", amountCents: 20000, date: "2026-09-02", note: "Original" });
+    for (const member of budgetSummary(source.budget).balances) source = savePayment(source, {
+      id: `current-${member.id}`, memberId: member.id, amountCents: member.remaining, date: "2026-09-03", note: "Contribution reçue",
+    });
+    const closed = await saveBudget(pool, closeMonth(source), 0, editor);
+    const restored = { ...closed, budget: { ...closed.budget, potTransfers: closed.budget.potTransfers.map((transfer) => ({ ...transfer, note: "Note restaurée" })) } };
+    const payload = { state: restored, expectedRevision: closed.revision };
+    expect((await request("/api/budget", "PUT", payload, auth)).status).toBe(422);
+    expect((await request("/api/budget", "PUT", { ...payload, intent: "restore" }, viewerAuth)).status).toBe(403);
+    expect((await pool.query("SELECT revision FROM budg_state WHERE id=1")).rows[0].revision).toBe(String(closed.revision));
+    expect((await request("/api/budget", "PUT", { ...payload, intent: "restore" }, auth)).status).toBe(200);
+    const audit = (await pool.query("SELECT action,before_data,after_data FROM budg_audit WHERE entity_type='potTransfer' ORDER BY id")).rows;
+    expect(audit.map((entry) => entry.action)).toEqual(["added", "updated"]);
+    expect(audit[1].before_data.note).toBe("Original");
+    expect(audit[1].after_data.note).toBe("Note restaurée");
+    const frozen = (await pool.query("SELECT snapshot FROM budg_monthly_archives WHERE month='2026-09'")).rows[0].snapshot;
+    expect(frozen.state.budget.potTransfers[0].note).toBe("Original");
+  });
+  it("restaure intégralement un export serveur V6 avec les transferts et leurs traces", async () => {
+    const source = await saveBudget(pool, savePotTransfer(withPot(), {
+      id: "top-up", lineId: "vacances", amountCents: 20000, date: "2026-09-02", note: "À conserver dans la sauvegarde",
+    }), 0, editor);
+    const audit = (await pool.query("SELECT * FROM budg_audit ORDER BY id")).rows;
+    const snapshot = parseServerSnapshot(JSON.parse(JSON.stringify({
+      format: "BUDG_SERVER_BACKUP", version: 1, kind: "daily", month: "2026-09",
+      createdAt: "2026-10-01T00:00:00Z", timeZone: "Europe/Paris", state: source, audit,
+    })));
+    expect(snapshot.audit.some((entry) => entry.entity_type === "potTransfer")).toBe(true);
+    await pool.query("TRUNCATE budg_state,budg_audit,budg_backups,budg_monthly_archives,budg_email_reports RESTART IDENTITY");
+    expect(await restoreDisasterSnapshot(pool, snapshot)).toEqual({ revision: source.revision, auditEvents: audit.length });
+    const auth = await login();
+    const restored = (await (await request("/api/budget", "GET", undefined, auth)).json()).state;
+    expect(restored).toEqual(source);
+    expect((await pool.query("SELECT count(*) FROM budg_audit WHERE entity_type='potTransfer'")).rows[0].count).toBe("1");
   });
   it("conserve la clôture et son rapport exact malgré une panne du service d’envoi", async () => {
     const auth = await login();

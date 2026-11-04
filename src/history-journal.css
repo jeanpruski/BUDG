@@ -36,7 +36,7 @@
 }
 .history-journal-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 12px;
   margin: 20px 0 5px;
 }
@@ -144,7 +144,8 @@
     gap: 12px 8px;
     margin-top: 16px;
   }
-  .history-journal-field:first-child {
+  .history-journal-field:first-child,
+  .history-journal-field:last-child {
     grid-column: 1 / -1;
   }
   .history-journal-field input,

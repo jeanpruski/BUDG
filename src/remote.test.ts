@@ -29,6 +29,16 @@ describe("stockage serveur authentifié", () => {
     expect(init.headers.get("X-CSRF-Token")).toBe("csrf-123");
     expect(JSON.parse(init.body)).toEqual({ state: before, expectedRevision: 0 });
   });
+  it("signale une restauration explicite tout en conservant la session et le contrôle de révision", async () => {
+    fetchMock.mockResolvedValueOnce(response({ user: editor, csrfToken: "csrf-123" }));
+    await getSession();
+    const before = initialState();
+    fetchMock.mockResolvedValueOnce(response({ state: { ...before, revision: 8 } }));
+    await remoteRepository.save(before, 7, { intent: "restore" });
+    const [, request] = fetchMock.mock.calls[1];
+    expect(JSON.parse(request.body)).toEqual({ state: before, expectedRevision: 7, intent: "restore" });
+    expect(request.headers.get("X-CSRF-Token")).toBe("csrf-123");
+  });
   it("confirme le budget malgré une archive en attente et efface l’alerte au prochain enregistrement sans avertissement", async () => {
     const target = new EventTarget();
     const warnings: string[][] = [];

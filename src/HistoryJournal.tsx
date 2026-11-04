@@ -12,10 +12,10 @@ export type HistoryJournalEntry = {
   envelopeLabel: string;
   description: string;
   amountCents: number;
-  source: "envelope" | "pot";
+  source: "envelope" | "pot" | "transfer";
 };
 
-/** Expenses only: contributions and surplus transfers are not money spent. */
+/** Internal transfers stay distinct from spending; contributions are managed in Versements. */
 export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
   const budgets = [state.budget, ...state.archivedBudgets];
   const monthLabels = new Map(budgets.map((budget) => [budget.id, budget.label]));
@@ -33,6 +33,19 @@ export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
         description: expense.description || "Paiement enregistré",
         amountCents: expense.amountCents,
         source: "envelope",
+      });
+    }
+    for (const transfer of budget.potTransfers) {
+      entries.push({
+        id: `${budget.id}:transfer:${transfer.id}`,
+        date: transfer.date,
+        month: budget.id,
+        monthLabel: budget.label,
+        envelopeKey: `envelope:${transfer.lineId}`,
+        envelopeLabel: names.get(transfer.lineId) || "Ancienne enveloppe",
+        description: transfer.note || "Renfort depuis le pot commun",
+        amountCents: transfer.amountCents,
+        source: "transfer",
       });
     }
   }
@@ -58,13 +71,14 @@ const normalize = (value: string) => value.normalize("NFD")
 
 export function filterHistoryJournal(
   entries: HistoryJournalEntry[],
-  filters: { search?: string; month?: string; envelope?: string } = {},
+  filters: { search?: string; month?: string; envelope?: string; kind?: string } = {},
 ) {
   const query = normalize(filters.search || "");
   return entries.filter((entry) =>
     (!filters.month || entry.month === filters.month) &&
     (!filters.envelope || entry.envelopeKey === filters.envelope) &&
-    (!query || normalize(`${entry.description} ${entry.envelopeLabel}`).includes(query)),
+    (!filters.kind || (filters.kind === "transfers" ? entry.source === "transfer" : entry.source !== "transfer")) &&
+    (!query || normalize(`${entry.description} ${entry.envelopeLabel} ${entry.source === "transfer" ? "transfert interne pot commun" : ""}`).includes(query)),
   );
 }
 
@@ -75,6 +89,7 @@ export function HistoryJournal({ state }: { state: AppState }) {
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
   const [envelope, setEnvelope] = useState("");
+  const [kind, setKind] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const entries = useMemo(() => historyJournalEntries(state), [state]);
   const months = useMemo(() => {
@@ -92,25 +107,27 @@ export function HistoryJournal({ state }: { state: AppState }) {
     return [...options].map(([key, names]) => ({ key, label: [...names].join(" / ") }))
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
   }, [entries]);
-  const rows = filterHistoryJournal(entries, { search, month, envelope });
-  const totalCents = rows.reduce((sum, entry) => sum + entry.amountCents, 0);
+  const rows = filterHistoryJournal(entries, { search, month, envelope, kind });
+  const totalCents = rows.reduce((sum, entry) => sum + (entry.source === "transfer" ? 0 : entry.amountCents), 0);
+  const transferredCents = rows.reduce((sum, entry) => sum + (entry.source === "transfer" ? entry.amountCents : 0), 0);
   const visibleRows = rows.slice(0, visibleCount);
   return (
     <section className="panel history-journal" aria-labelledby={titleId}>
       <div className="history-journal-header">
         <div>
-          <h2 id={titleId}>Journal des dépenses</h2>
-          <p>Retrouvez les dépenses des enveloppes et du pot commun.</p>
+          <h2 id={titleId}>Journal des opérations</h2>
+          <p>Retrouvez les dépenses et les transferts internes du pot commun.</p>
         </div>
         <p className="history-journal-total" aria-live="polite" aria-atomic="true">
-          <span>{rows.length} {rows.length === 1 ? "dépense" : "dépenses"} · Total filtré</span>
+          <span>{rows.length} {rows.length === 1 ? "opération" : "opérations"} · Dépenses filtrées</span>
           <strong>{euro(totalCents)}</strong>
+          {transferredCents > 0 && <span>Transferts internes : {euro(transferredCents)}</span>}
         </p>
       </div>
       <div className="history-journal-filters">
         <label className="history-journal-field">
           Rechercher
-          <input type="search" aria-label="Rechercher dans le journal des dépenses"
+          <input type="search" aria-label="Rechercher dans le journal des opérations"
             placeholder="Libellé ou enveloppe…" value={search}
             onChange={(event) => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }} />
         </label>
@@ -118,7 +135,7 @@ export function HistoryJournal({ state }: { state: AppState }) {
           Mois
           <select aria-label="Filtrer le journal par mois" value={month}
             onChange={(event) => { setMonth(event.target.value); setVisibleCount(PAGE_SIZE); }}>
-            <option value="">Tous les mois</option>
+            <option value="">Tous</option>
             {months.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
         </label>
@@ -126,8 +143,17 @@ export function HistoryJournal({ state }: { state: AppState }) {
           Enveloppe
           <select aria-label="Filtrer le journal par enveloppe" value={envelope}
             onChange={(event) => { setEnvelope(event.target.value); setVisibleCount(PAGE_SIZE); }}>
-            <option value="">Toutes les dépenses</option>
+            <option value="">Toutes</option>
             {envelopes.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </label>
+        <label className="history-journal-field">
+          Nature
+          <select aria-label="Filtrer le journal par nature" value={kind}
+            onChange={(event) => { setKind(event.target.value); setVisibleCount(PAGE_SIZE); }}>
+            <option value="">Tout</option>
+            <option value="expenses">Dépenses</option>
+            <option value="transfers">Transferts internes</option>
           </select>
         </label>
       </div>
@@ -140,22 +166,23 @@ export function HistoryJournal({ state }: { state: AppState }) {
                 <div className="history-journal-meta">
                   <time dateTime={entry.date}>{displayDate(entry.date)}</time>
                   <span className={entry.source === "pot" ? "history-journal-pot" : ""}>
-                    {entry.envelopeLabel}
+                    {entry.source === "transfer" ? `Pot commun → ${entry.envelopeLabel}` : entry.envelopeLabel}
                   </span>
+                  {entry.source === "transfer" && <span className="pot-transfer-tag">Transfert interne</span>}
                 </div>
               </div>
-              <strong className="history-journal-amount">−{euro(entry.amountCents)}</strong>
+              <strong className="history-journal-amount">{entry.source === "transfer" ? "↔" : "−"}{euro(entry.amountCents)}</strong>
             </li>
           ))}
         </ol>
       ) : (
         <p className="history-journal-empty" role="status">
-          {entries.length ? "Aucune dépense ne correspond à ces filtres." : "Aucune dépense enregistrée."}
+          {entries.length ? "Aucune opération ne correspond à ces filtres." : "Aucune opération enregistrée."}
         </p>
       )}
       {rows.length > PAGE_SIZE && (
         <div className="history-journal-footer">
-          <span>{visibleRows.length} sur {rows.length} dépenses affichées</span>
+          <span>{visibleRows.length} sur {rows.length} opérations affichées</span>
           {visibleRows.length < rows.length && (
             <button type="button" className="secondary" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
               Afficher la suite

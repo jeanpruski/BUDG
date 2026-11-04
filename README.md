@@ -40,7 +40,7 @@ BUDG s’ouvre sur **http://127.0.0.1:1420**. Gardez le terminal ouvert pendant 
 1. Renseignez vos prénoms, vos salaires nets et le premier mois à gérer.
 2. Dans **Enveloppes**, renseignez les montants mensuels du prêt, de l’électricité, de l’assurance, des courses, etc. Les enveloppes initiales sont à zéro et aucune opération fictive n’est créée.
 3. Dans **Versements**, enregistrez les virements réellement reçus sur le compte commun. Vous pouvez les saisir en plusieurs fois, les modifier et corriger une erreur.
-4. Ajoutez chaque sortie réelle dans **Dépenses** ou directement depuis son enveloppe. Un achat diminue immédiatement le disponible.
+4. Ajoutez chaque sortie réelle depuis son enveloppe. Sa liste dépliable permet de modifier ou supprimer une dépense ; **Historique** propose le journal global avec recherche et filtres. Un achat diminue immédiatement le disponible.
 5. En fin de mois, vérifiez les factures et les contributions, puis cliquez sur **Vérifier et clôturer**.
 6. Le surplus non dépensé rejoint **Pot commun**. Il reste sur le compte commun ; aucun virement personnel n’est nécessaire. Vous pouvez y enregistrer les achats payés avec ce pot.
 7. **Préparer le mois suivant** reprend les enveloppes et les réserves, applique les salaires du nouveau mois et remet les opérations à zéro.
@@ -53,10 +53,11 @@ Le solde est calculé à partir des opérations saisies. BUDG ne se connecte pas
 - **Vie quotidienne** : 50/50, par exemple courses et vacances.
 - Les calculs utilisent des centimes entiers avec un arrondi déterministe qui conserve le total.
 - Le versement partiel de chaque membre est affecté proportionnellement à ses parts prévues dans les enveloppes. Les compléments financent d’abord ses dépassements. Les sommes versées mais non dépensées rejoignent le pot commun à la clôture.
-- **Prévu** est un objectif ; **financé** correspond aux versements reçus affectés à l’enveloppe et à sa réserve reportée ; **disponible** est le montant financé moins les dépenses.
+- **Provision du mois** est un objectif ; **financé** correspond aux versements reçus, aux réserves reportées et aux renforts issus du pot commun ; **disponible** est le montant financé moins les dépenses.
 - Au début du mois, chaque personne conserve sur son compte personnel son salaire moins sa contribution prévue. Ce reste personnel est affiché sur sa carte.
 - Après les dépenses, le surplus réellement disponible rejoint le pot commun, une fois les réserves affectées exclues. Il est inclus dans le solde du compte et ne réduit pas automatiquement les contributions du mois suivant.
 - Les achats du pot sont identifiés **Pot commun**, modifiables et supprimables. Ils diminuent une seule fois le pot et le solde bancaire calculé, sans être facturés à nouveau aux membres. Ne les saisissez pas aussi dans une enveloppe. Un achat ne peut dépasser le pot disponible.
+- **Alimenter depuis le pot commun** affecte un renfort à une enveloppe du mois actif : le pot diminue et l’enveloppe augmente, avec un solde bancaire inchangé. La provision mensuelle reste due. Le journal identifie ce transfert interne séparément des dépenses. L’annulation est possible pendant le mois actif si le montant est encore disponible dans l’enveloppe.
 
 Exemple avec des salaires de 3 000 € et 2 000 € : appartement prévu 1 000 €, courses prévues 500 €, vacances réservées 200 €. Contributions : 950 € et 750 €. Si l’appartement coûte 800 € et les courses 420 €, chacun garde initialement **2 050 € et 1 250 €** de salaire personnel. Après les achats, **280 € rejoignent le pot commun** et **200 € restent réservés aux vacances** : le compte commun contient toujours 480 €.
 
@@ -64,7 +65,9 @@ Exemple avec des salaires de 3 000 € et 2 000 € : appartement prévu 1 000 �
 
 - **Facture** : paiement réel à saisir et règlement complet à confirmer. Une échéance facultative signale les factures à vérifier. La confirmation seule ne crée pas de dépense.
 - **Dépenses courantes** : plusieurs achats possibles ; le solde non dépensé rejoint le pot commun à la clôture.
-- **Réserve** : le solde est reporté et séparé du pot commun, utile pour les vacances, travaux ou taxes annuelles. Le propriétaire de chaque centime est conservé même si les salaires changent.
+- **Réserve** : le solde reste dans cette enveloppe et s’ajoute à la provision du mois suivant. Par exemple, 100 € reportés et une provision de 600 € demandent toujours 600 € de nouveaux versements, pour 700 € financés après réception. Un renfort de 200 € depuis le pot porte le total à 900 €. Les reports personnels et les sommes issues du pot restent distincts même si les salaires changent.
+
+À la clôture, le reliquat d’un renfort reste affecté à une enveloppe Réserve ; dans une Facture ou une enveloppe courante, le solde non dépensé rejoint le pot une seule fois. Les transferts ne créent ni achat ni versement personnel.
 
 Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêter de l’alimenter, mettez sa contribution mensuelle à zéro. Cette version ne propose pas encore de libération manuelle d’une réserve vers le pot commun.
 

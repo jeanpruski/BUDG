@@ -449,7 +449,7 @@ describe("migration des sauvegardes précédentes", () => {
   }
   it("transforme les remboursements non effectués en pot sans modifier le solde", () => {
     const s = validateState(legacy());
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(6);
     expect(potSummary(s).availableCents).toBe(8000);
     expect(accountBalance(s)).toBe(8000);
     expect(s.budget.refunds).toEqual([]);

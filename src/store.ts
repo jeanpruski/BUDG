@@ -8,8 +8,10 @@ import {
   Member,
   Payment,
   PotExpense,
+  PotTransfer,
   Share,
   budgetSummary,
+  potSummary,
   amountForMonth,
   closeBudget,
   monthLabel,
@@ -39,7 +41,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 5,
+    version: 6,
     revision: 0,
     configured: false,
     members,
@@ -62,10 +64,12 @@ export function initialState(month = today().slice(0, 7)): AppState {
         plannedCents: 0,
         shares: zeroShares(members),
         openingShares: zeroShares(members),
+        openingPotCents: 0,
         settled: false,
       })),
       expenses: [],
       payments: [],
+      potTransfers: [],
       refunds: [],
       closedPotCents: 0,
     },
@@ -144,12 +148,15 @@ export function saveLine(
       "Cette enveloppe contient des dépenses : son groupe et son type doivent rester inchangés.",
     );
   if (
-    old?.openingShares.some((x) => x.amountCents > 0) &&
+    old && (old.openingShares.some((x) => x.amountCents > 0) || old.openingPotCents > 0) &&
     (line.kind !== "RESERVE" || line.expenseGroup !== old.expenseGroup)
   )
     throw new Error(
       "Cette enveloppe contient une réserve reportée : conservez son type et sa répartition.",
     );
+  if (old && s.budget.potTransfers.some((transfer) => transfer.lineId === old.id) &&
+      (line.kind !== old.kind || line.expenseGroup !== old.expenseGroup))
+    throw new Error("Cette enveloppe reçoit de l’argent du pot commun : conservez son groupe et son type.");
   const allocationType =
     line.allocationType ??
     old?.allocationType ??
@@ -179,6 +186,7 @@ export function saveLine(
       customPercentages,
     ),
     openingShares: old?.openingShares ?? zeroShares(s.members),
+    openingPotCents: old?.openingPotCents ?? 0,
     settled: old?.settled ?? false,
   };
   return withBudget(s, {
@@ -232,6 +240,8 @@ export function removeLine(s: AppState, id: string) {
   active(s);
   if (
     s.budget.expenses.some((e) => e.lineId === id) ||
+    s.budget.potTransfers.some((transfer) => transfer.lineId === id) ||
+    (s.budget.lines.find((line) => line.id === id)?.openingPotCents ?? 0) > 0 ||
     s.budget.lines
       .find((l) => l.id === id)
       ?.openingShares.some((x) => x.amountCents)
@@ -400,9 +410,11 @@ export function startNextMonth(s: AppState) {
             i
           ],
         })),
+        openingPotCents: summary.lines.find((entry) => entry.id === l.id)!.reservedPotCents,
       })),
       expenses: [],
       payments: [],
+      potTransfers: [],
       refunds: [],
       closedPotCents: 0,
     },
@@ -426,6 +438,37 @@ export function removePotExpense(s: AppState, id: string) {
     potExpenses: s.potExpenses.filter((e) => e.id !== id),
   });
 }
+export function savePotTransfer(s: AppState, transfer: PotTransfer) {
+  active(s);
+  if (transfer.date > today())
+    throw new Error("Enregistrez un transfert uniquement à sa date réelle, pas dans le futur.");
+  const previous = s.budget.potTransfers.find((entry) => entry.id === transfer.id);
+  const remainingPot = potSummary(s).availableCents + (previous?.amountCents ?? 0);
+  if (transfer.amountCents > remainingPot)
+    throw new Error("Le montant dépasse le pot commun disponible.");
+  // Editing a transfer must obey the same cancellation rule for the amount removed.
+  if (previous && (previous.lineId !== transfer.lineId || transfer.amountCents < previous.amountCents)) {
+    const removed = previous.lineId === transfer.lineId ? previous.amountCents - transfer.amountCents : previous.amountCents;
+    const line = budgetSummary(s.budget).lines.find((entry) => entry.id === previous.lineId);
+    if (!line || line.available < removed)
+      throw new Error("Cet argent a déjà été dépensé dans l’enveloppe ; ce transfert ne peut plus être réduit ou déplacé.");
+  }
+  return withBudget(s, {
+    ...s.budget,
+    potTransfers: previous
+      ? s.budget.potTransfers.map((entry) => entry.id === transfer.id ? transfer : entry)
+      : [...s.budget.potTransfers, transfer],
+  });
+}
+export function removePotTransfer(s: AppState, id: string) {
+  active(s);
+  const transfer = s.budget.potTransfers.find((entry) => entry.id === id);
+  if (!transfer) throw new Error("Ce transfert n’existe pas.");
+  const line = budgetSummary(s.budget).lines.find((entry) => entry.id === transfer.lineId);
+  if (!line || line.available < transfer.amountCents)
+    throw new Error("Cet argent a déjà été dépensé dans l’enveloppe ; ce transfert ne peut plus être annulé.");
+  return withBudget(s, { ...s.budget, potTransfers: s.budget.potTransfers.filter((entry) => entry.id !== id) });
+}
 export function resetState(s: AppState) {
   const clean = initialState(s.budget.id);
   return validateState({
@@ -446,6 +489,7 @@ export function resetState(s: AppState) {
           l.customPercentages,
         ),
         openingShares: zeroShares(s.members),
+        openingPotCents: 0,
         settled: false,
       })),
     },

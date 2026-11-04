@@ -27,10 +27,10 @@ export function BudgetGuide({
 }) {
   const b = state.budget;
   const summary = budgetSummary(b);
-  const prepared = summary.plannedCents > 0 || b.lines.some((line) => line.amountPlan || line.openingShares.some((share) => share.amountCents > 0));
+  const prepared = summary.plannedCents > 0 || b.potTransfers.length > 0 || b.lines.some((line) => line.amountPlan || line.openingPotCents > 0 || line.openingShares.some((share) => share.amountCents > 0));
   const funded = prepared && summary.missingCents === 0;
   const closed = b.status === "CLOSED";
-  const zeroMonth = prepared && summary.plannedCents === 0 && summary.missingCents === 0 && !b.expenses.length && !b.payments.length;
+  const zeroMonth = prepared && summary.plannedCents === 0 && summary.missingCents === 0 && !b.expenses.length && !b.payments.length && !b.potTransfers.length;
   const steps = [
     { label: "Votre duo", done: true },
     { label: "Vos enveloppes", done: prepared },

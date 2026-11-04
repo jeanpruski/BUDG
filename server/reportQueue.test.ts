@@ -69,7 +69,7 @@ describe.runIf(Boolean(testUrl))("file durable des rapports sur PostgreSQL", () 
     admin = new Pool({ connectionString: testUrl });
     await admin.query(`CREATE SCHEMA ${schema}`);
     pool = new Pool({ connectionString: testUrl, options: `-c search_path=${schema}`, max: 6 });
-    for (const migration of ["001_online.sql", "002_amount_plans.sql", "003_email_reports.sql"])
+    for (const migration of ["001_online.sql", "002_amount_plans.sql", "003_email_reports.sql", "004_pot_transfers.sql"])
       await pool.query(await readFile(join(process.cwd(), "server/migrations", migration), "utf8"));
   });
   beforeEach(async () => {

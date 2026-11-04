@@ -12,6 +12,7 @@ const line: BudgetLine = {
   allocationType: "FIFTY_FIFTY",
   shares: [{ memberId: "a", amountCents: 10000 }, { memberId: "b", amountCents: 10000 }],
   openingShares: [{ memberId: "a", amountCents: 0 }, { memberId: "b", amountCents: 0 }],
+  openingPotCents: 0,
   settled: false,
 };
 const render = (value: BudgetLine = line, month = "2026-11", busy = false) => renderToStaticMarkup(

@@ -81,9 +81,9 @@ describe("journal global des dépenses", () => {
 
   it("affiche les filtres et les dépenses sans proposer de modification", () => {
     const html = renderToStaticMarkup(<HistoryJournal state={fixture()} />);
-    expect(html).toContain("Journal des dépenses");
-    expect(html).toContain("Total filtré");
-    expect(html).toContain("Rechercher dans le journal des dépenses");
+    expect(html).toContain("Journal des opérations");
+    expect(html).toContain("Dépenses filtrées");
+    expect(html).toContain("Rechercher dans le journal des opérations");
     expect(html).toContain("Filtrer le journal par mois");
     expect(html).toContain("Filtrer le journal par enveloppe");
     expect(html).toContain("septembre 2026");
@@ -102,7 +102,7 @@ describe("journal global des dépenses", () => {
     const html = renderToStaticMarkup(<HistoryJournal state={state} />);
     expect(html.match(/class="history-journal-entry"/g)).toHaveLength(10);
     expect(html).toContain("Afficher la suite");
-    expect(html).toContain("12 dépenses");
+    expect(html).toContain("12 opérations");
     expect(html).toContain("12,00");
   });
 });

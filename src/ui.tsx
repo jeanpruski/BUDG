@@ -95,11 +95,13 @@ export function Form({
   submit,
   busy,
   button = "Enregistrer",
+  canSubmit = true,
 }: {
   children: ReactNode;
   submit: (data: FormData) => void;
   busy: boolean;
   button?: string;
+  canSubmit?: boolean;
 }) {
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -109,7 +111,7 @@ export function Form({
     <form onSubmit={onSubmit} aria-busy={busy}>
       <fieldset disabled={busy}>
         {children}
-        <button className="primary" type="submit">
+        <button className="primary" type="submit" disabled={!canSubmit}>
           {busy && <Spinner />}
           {busy ? "Enregistrement…" : button}
         </button>

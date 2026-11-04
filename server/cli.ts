@@ -10,6 +10,7 @@ import { runJobs, parseServerSnapshot, restoreDisasterSnapshot, flushMonthlyArch
 import migrationSql from "./migrations/001_online.sql";
 import amountPlanMigrationSql from "./migrations/002_amount_plans.sql";
 import emailReportMigrationSql from "./migrations/003_email_reports.sql";
+import potTransferMigrationSql from "./migrations/004_pot_transfers.sql";
 import { runReportEmails } from "./reportDelivery";
 import { readReportEmailSettings, deliverReportMessage } from "./reportMail";
 import { renderMonthlyReport } from "./monthlyReport";
@@ -51,6 +52,7 @@ export async function migrate(pool: Pool) {
     await client.query(migrationSql);
     await client.query(amountPlanMigrationSql);
     await client.query(emailReportMigrationSql);
+    await client.query(potTransferMigrationSql);
     await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }
@@ -183,7 +185,7 @@ restore-disaster exige une base sans budget ni journal et restaure les traces or
       if (!userResult.rows[0]) throw new Error("L’auteur de la restauration doit être le compte éditeur actif.");
       const current = await pool.query("SELECT revision FROM budg_state WHERE id=1");
       const expectedRevision = Number(current.rows[0]?.revision || 0);
-      const restored = await saveBudget(pool, state, expectedRevision, userResult.rows[0] as PublicUser, { timeZone: config.timeZone });
+      const restored = await saveBudget(pool, state, expectedRevision, userResult.rows[0] as PublicUser, { timeZone: config.timeZone, allowHistoryRewrite: true });
       console.log(`Budget restauré, révision ${restored.revision}. Journal conservé.`);
       await publishAfterRestore();
     } else throw new Error("Commande inconnue. Utilisez --help.");

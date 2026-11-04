@@ -140,7 +140,11 @@ export function createApp(config: ServerConfig, pool: Pool) {
     res.json({ state: result.rows[0] ? validateState(result.rows[0].data) : null });
   }));
   app.put("/api/budget", requireLogin, requireEditor, originGuard(config), requireCsrf, requireJson, route(async (req, res) => {
-    const state = await saveBudget(pool, req.body?.state, req.body?.expectedRevision, req.auth!.user, { timeZone: config.timeZone });
+    if (req.body?.intent !== undefined && req.body.intent !== "restore")
+      throw new ApiError(422, "Intention de sauvegarde invalide.");
+    const state = await saveBudget(pool, req.body?.state, req.body?.expectedRevision, req.auth!.user, {
+      timeZone: config.timeZone, allowHistoryRewrite: req.body?.intent === "restore",
+    });
     const warnings: string[] = [];
     // Financial data is committed. A disk problem must never turn this successful save into an error.
     try {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { budgetSummary, validateState, type AppState } from "../src/domain";
-import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment, savePotExpense, startNextMonth } from "../src/store";
+import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, startNextMonth } from "../src/store";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
 
@@ -40,6 +40,12 @@ function history() {
   state = expense(state, "Courses", 1234);
   state = savePotExpense(state, { id: "pot-september", amountCents: 2000, date: "2026-09-01", description: "Hors du mois ciblé" });
   return snapshot(state, "2026-08");
+}
+function withTransfer() {
+  const previous = closeMonth(fund(envelope(setup(), "Courses", 100000, "DAILY_LIFE")));
+  let current = envelope(startNextMonth(previous), "Vacances", 60000, "DAILY_LIFE", "RESERVE");
+  current = savePotTransfer(current, { id: "top-up", lineId: "Vacances", amountCents: 20000, date: "2026-09-02", note: "Renfort ponctuel" });
+  return current;
 }
 
 describe("comptes rendus mensuels par email", () => {
@@ -130,5 +136,64 @@ describe("comptes rendus mensuels par email", () => {
     expect(current.accountBalanceCents).toBe(4000);
     expect(current.refundsCents).toBe(4000);
     expect(current.operations).toMatchObject([{ type: "Ancien remboursement", date: "2026-09-01", amountCents: 4000 }]);
+  });
+  it("identifie un transfert interne sans le compter comme une dépense ou un versement et conserve les provisions", async () => {
+    const raw = snapshot(withTransfer());
+    const data = monthlyReportData(raw);
+    expect(data.spentCents).toBe(0);
+    expect(data.receivedCents).toBe(0);
+    expect(data.accountBalanceCents).toBe(100000);
+    expect(data.potBalanceCents).toBe(80000);
+    expect(data.reserveBalanceCents).toBe(20000);
+    expect(data.communalReserveCents).toBe(20000);
+    expect(data.potTransferredCents).toBe(20000);
+    expect(data.summary.plannedCents).toBe(160000);
+    expect(data.summary.missingCents).toBe(160000);
+    expect(data.operations).toMatchObject([{ type: "Transfert interne", amountCents: 20000, internal: true, description: "Pot commun vers Vacances · Renfort ponctuel" }]);
+    const report = await renderMonthlyReport(raw, "monthly");
+    expect(report.text).toContain("Transferts internes du pot vers les enveloppes");
+    expect(report.text).toContain("ne sont ni des dépenses ni de nouveaux versements");
+    expect(report.html).toContain("Ils ne changent pas le solde bancaire");
+    const saved = JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString());
+    expect(validateState(saved)).toEqual(raw.state);
+    expect(saved.budget.potTransfers).toEqual(raw.state.budget.potTransfers);
+  });
+  it("n’anticipe pas les transferts du mois suivant dans le pot et conserve la provenance des réserves", () => {
+    const closed = closeMonth(expense(fund(withTransfer()), "Vacances", 65000));
+    let next = startNextMonth(closed);
+    next = savePotTransfer(next, { id: "future-top-up", lineId: "Vacances", amountCents: 5000, date: "2026-10-02", note: "Renfort du mois suivant" });
+    const data = monthlyReportData(snapshot(next, "2026-09"));
+    expect(data.spentCents).toBe(65000);
+    expect(data.receivedCents).toBe(160000);
+    expect(data.reserveBalanceCents).toBe(15000);
+    expect(data.communalReserveCents).toBe(15000);
+    expect(data.potBalanceCents).toBe(180000);
+    expect(data.accountBalanceCents).toBe(195000);
+    expect(data.potTransferredCents).toBe(20000);
+    expect(data.operations.some((operation) => operation.description.includes("mois suivant"))).toBe(false);
+  });
+  it("ne présente jamais davantage de réserve issue du pot que d’argent effectivement disponible pendant un mois impayé", () => {
+    const raw = snapshot(expense(withTransfer(), "Vacances", 10000));
+    const data = monthlyReportData(raw);
+    expect(data.receivedCents).toBe(0);
+    expect(data.reserveBalanceCents).toBe(10000);
+    expect(data.communalReserveCents).toBe(10000);
+    expect(data.summary.reservedCents).toBe(70000);
+  });
+  it("rend toujours un ancien instantané V5 sans modifier sa source et joint son budget migré", async () => {
+    const legacy = JSON.parse(JSON.stringify(history()));
+    legacy.state.version = 5;
+    for (const budget of [legacy.state.budget, ...legacy.state.archivedBudgets]) {
+      delete budget.potTransfers;
+      for (const line of budget.lines) delete line.openingPotCents;
+    }
+    const before = JSON.stringify(legacy);
+    const report = await renderMonthlyReport(legacy, "monthly");
+    const state = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
+    expect(state.version).toBe(6);
+    expect(state.budget.potTransfers).toEqual([]);
+    expect(state.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
+    expect(monthlyReportData(legacy).potBalanceCents).toBe(47655);
+    expect(JSON.stringify(legacy)).toBe(before);
   });
 });

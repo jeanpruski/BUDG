@@ -5,7 +5,7 @@ import { remoteRepository, serverStorageMode } from "./remote";
 // The UI depends only on this contract: a shared backend can replace the local adapters.
 export interface BudgetRepository {
   load(): Promise<AppState | null>;
-  save(state: AppState, expectedRevision: number): Promise<AppState>;
+  save(state: AppState, expectedRevision: number, options?: { intent?: "restore" }): Promise<AppState>;
   backups(): Promise<Backup[]>;
   recover(state: AppState): Promise<AppState>;
 }

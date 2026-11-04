@@ -6,6 +6,7 @@ import { MobileMenu } from "./MobileMenu";
 import { MonthClosing } from "./MonthClosing";
 import { MonthlyIncomePanel } from "./MonthlyIncomePanel";
 import { EnvelopeAmountForm } from "./EnvelopeAmountForm";
+import { PotTransferForm } from "./PotTransferForm";
 import { TrackingStartForm, TrackingStartPanel } from "./TrackingStart";
 import { startTrackingAtMonth } from "./budgetStart";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
@@ -53,6 +54,8 @@ import {
   initialState,
   savePotExpense,
   removePotExpense,
+  savePotTransfer,
+  removePotTransfer,
   removeExpense,
   removeLine,
   removePayment,
@@ -97,11 +100,13 @@ type Dialog =
   | { type: "monthlyIncome"; mode: "current" | "schedule" | "open" }
   | { type: "coach" }
   | { type: "potExpense"; expense?: PotExpense }
+  | { type: "potTransfer"; lineId?: string }
   | {
       type: "confirm";
       title: string;
       message: string;
       action: (s: AppState) => AppState;
+      intent?: "restore";
     };
 const navigation = [
   ["dashboard", "Vue d’ensemble", Home],
@@ -201,6 +206,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   async function commit(
     change: (s: AppState) => AppState,
     message = "Modification enregistrée",
+    intent?: "restore",
   ) {
     if (readOnly) {
       setError("Votre compte est en lecture seule. Seul un compte éditeur peut modifier le budget.");
@@ -213,7 +219,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     setError("");
     try {
       const previous = current.current;
-      const next = await repository.save(change(previous), previous.revision);
+      const next = await repository.save(change(previous), previous.revision, intent ? { intent } : undefined);
       current.current = next;
       setState(next);
       if (!next.configured) {
@@ -230,8 +236,8 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       setBusy(false);
     }
   }
-  async function submit(change: (s: AppState) => AppState, message?: string) {
-    const ok = await commit(change, message);
+  async function submit(change: (s: AppState) => AppState, message?: string, intent?: "restore") {
+    const ok = await commit(change, message, intent);
     if (ok) setDialog(null);
     return ok;
   }
@@ -254,8 +260,9 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     title: string,
     message: string,
     action: (s: AppState) => AppState,
+    intent?: "restore",
   ) {
-    open({ type: "confirm", title, message, action });
+    open({ type: "confirm", title, message, action, intent });
   }
   function go(next: View) {
     setView(next);
@@ -271,7 +278,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     removeLine: (id) =>
       confirm(
         "Supprimer cette enveloppe ?",
-        "Seules les enveloppes sans dépenses et sans réserve reportée peuvent être supprimées.",
+        "Seules les enveloppes sans dépenses, sans réserve reportée et sans transfert du pot peuvent être supprimées.",
         (s) => removeLine(s, id),
       ),
     removeExpense: (id) =>
@@ -299,6 +306,12 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     close: () => open({ type: "close" }),
     next: () => open({ type: "monthlyIncome", mode: "open" }),
     potExpense: (expense) => open({ type: "potExpense", expense }),
+    potTransfer: (lineId) => open({ type: "potTransfer", lineId }),
+    removePotTransfer: (id) => confirm(
+      "Annuler ce transfert ?",
+      "Le montant sera rendu au pot commun et retiré de l’enveloppe. Aucun mouvement bancaire n’est effectué.",
+      (s) => removePotTransfer(s, id),
+    ),
     removePotExpense: (id) =>
       confirm(
         "Supprimer cette dépense du pot commun ?",
@@ -317,6 +330,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
         "Restaurer cette sauvegarde ?",
         `Elle contient ${restored.budget.label}, ${restored.archivedBudgets.length} mois archivé(s) et remplacera les données actuelles. Une copie automatique des données actuelles sera conservée.`,
         (s) => ({ ...restored, revision: s.revision }),
+        "restore",
       );
     } catch (e) {
       setError(`Import impossible. ${errorMessage(e)}`);
@@ -576,7 +590,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                       </button>
                     )}
                   </div>
-                  <Envelopes budget={b} actions={actions} readOnly={readOnly} />
+                  <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} />
                   <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>
               )}
@@ -711,6 +725,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                                     ...restored,
                                     revision: s.revision,
                                   }),
+                                  "restore",
                                 );
                               })
                             }
@@ -735,6 +750,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                           "Effacer les opérations financières ?",
                           "Les opérations, le pot commun et les archives seront effacés. Vos enveloppes et vos revenus sont conservés. Une copie automatique sera créée.",
                           resetState,
+                          "restore",
                         )
                       }
                     >
@@ -755,6 +771,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                           "Tout réinitialiser ?",
                           "Vos prénoms, salaires, changements de revenus programmés, enveloppes personnalisées, dépenses, versements, réserves, pot commun et archives seront retirés du budget actif. Vous reviendrez au premier écran. Une sauvegarde automatique sera conservée pour pouvoir revenir en arrière ; les sauvegardes existantes ne sont pas supprimées.",
                           resetEverything,
+                          "restore",
                         )
                       }
                     >
@@ -1034,6 +1051,20 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           </Form>
         </Modal>
       )}
+      {!readOnly && dialog?.type === "potTransfer" && (
+        <Modal title="Alimenter depuis le pot commun" close={closeDialog}>
+          {activeDialogError}
+          <PotTransferForm state={state} lineId={dialog.lineId} busy={busy} submit={(data) => attempt(() => {
+            void submit((s) => savePotTransfer(s, {
+              id: uid(),
+              lineId: String(data.get("lineId")),
+              amountCents: parseMoney(data.get("amount")),
+              date: String(data.get("date")),
+              note: String(data.get("note") ?? ""),
+            }), "Transfert enregistré : le renfort est disponible dans l’enveloppe.");
+          })} />
+        </Modal>
+      )}
       {!readOnly && dialog?.type === "potExpense" && (
         <Modal
           title={
@@ -1105,7 +1136,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               className="primary"
               disabled={busy}
               onClick={() => {
-                void submit(dialog.action);
+                void submit(dialog.action, undefined, dialog.intent);
               }}
             >
               {busy && <Spinner />}

@@ -49,7 +49,7 @@ fn save_budget(app: tauri::AppHandle, lock: tauri::State<StorageLock>, mut state
     let revision = data.current.as_ref().and_then(|v| v["revision"].as_u64()).unwrap_or(0);
     if expected_revision >= 0 && revision != expected_revision as u64 { return Err("Les données ont changé dans une autre fenêtre. Rechargez l’application.".into()); }
     if expected_revision < 0 { state["revision"] = serde_json::json!(revision + 1); }
-    if !matches!(state["version"].as_u64(), Some(4) | Some(5)) || state["revision"].as_u64() != Some(revision + 1) { return Err("Version de sauvegarde invalide.".into()); }
+    if !matches!(state["version"].as_u64(), Some(4) | Some(5) | Some(6)) || state["revision"].as_u64() != Some(revision + 1) { return Err("Version de sauvegarde invalide.".into()); }
     if let Some(current) = data.current.take() {
         let id = revision.to_string();
         data.backups.push(Backup { id: id.clone(), created_at, state: current });

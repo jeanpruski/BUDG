@@ -128,13 +128,13 @@ function readBudget(data: unknown): AppState | null {
 }
 export const remoteRepository: BudgetRepository = {
   async load() { return readBudget(await apiRequest("/api/budget")); },
-  async save(state, expectedRevision) {
+  async save(state, expectedRevision, options) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
       throw new Error("La révision du budget est invalide. Rechargez l’application.");
     const sessionToken = csrfToken;
     const data = await apiRequest("/api/budget", {
       method: "PUT",
-      body: JSON.stringify({ state: validateState(state), expectedRevision }),
+      body: JSON.stringify({ state: validateState(state), expectedRevision, ...(options?.intent ? { intent: options.intent } : {}) }),
     });
     const saved = readBudget(data);
     if (!saved) throw new Error("Le serveur n’a pas enregistré le budget.");

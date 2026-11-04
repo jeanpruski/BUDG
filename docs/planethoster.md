@@ -146,7 +146,9 @@ Si le serveur ou le Cron est indisponible pendant tout le créneau de minuit, le
 
 ## 7. Retrouver le journal et préparer les statistiques
 
-Le journal `budg_audit` conserve les ajouts, corrections et suppressions de dépenses, versements et achats du pot commun, avec l’auteur, l’heure, le mois concerné, l’ancienne valeur et la nouvelle. Le déplacement d’un mois vers les archives ne doit pas recréer ses paiements. Les imports et remises à zéro sont eux aussi visibles comme changements d’opérations. Le compte lecteur peut consulter les traces ; il ne peut pas les modifier ou les effacer par l’API.
+Le journal `budg_audit` conserve les ajouts, corrections et suppressions de dépenses, versements, achats du pot commun et transferts internes vers une enveloppe (`potTransfer`), avec l’auteur, l’heure, le mois concerné, l’ancienne valeur et la nouvelle. Le déplacement d’un mois vers les archives ne doit pas recréer ses paiements. Les imports et remises à zéro sont eux aussi visibles comme changements d’opérations. Le compte lecteur peut consulter les traces ; il ne peut pas les modifier ou les effacer par l’API.
+
+La migration `004_pot_transfers.sql` accepte le format de budget V6 et les traces de transferts, sans réécrire les budgets ou anciennes sauvegardes V4/V5. L’application convertit les sauvegardes anciennes à la lecture. Une restauration volontaire via l’interface transmet `intent: "restore"` avec la révision actuelle ; les écritures ordinaires protègent les transferts des mois clôturés.
 
 Les snapshots incluent ce journal, même pour des paiements ensuite supprimés. Les données et l’API du journal préparent un futur écran de statistiques ; cet écran et un export statistique dédié ne sont pas encore construits. Les calculs pourront utiliser les paiements réels et les mois clôturés plutôt que les montants simplement prévus.
 

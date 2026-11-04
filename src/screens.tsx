@@ -1,6 +1,8 @@
 import { HeroArt } from "./visuals";
 import { MobileDetails } from "./MobileDetails";
 import { EnvelopeExpenses } from "./EnvelopeExpenses";
+import { EnvelopeFunding } from "./EnvelopeFunding";
+import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
 import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
 import {
@@ -25,6 +27,7 @@ import {
   Expense,
   Payment,
   PotExpense,
+  PotTransfer,
   potSummary,
   accountBalance,
   budgetSummary,
@@ -45,6 +48,8 @@ export type Actions = {
   next: () => void;
   potExpense: (expense?: PotExpense) => void;
   removePotExpense: (id: string) => void;
+  potTransfer?: (lineId?: string) => void;
+  removePotTransfer?: (id: string) => void;
 };
 export { Dashboard } from "./Overview";
 
@@ -120,11 +125,13 @@ export function Envelopes({
   actions,
   readOnly = false,
   compact = false,
+  potAvailableCents = 0,
 }: {
   budget: Budget;
   actions: Actions;
   readOnly?: boolean;
   compact?: boolean;
+  potAvailableCents?: number;
 }) {
   const summary = budgetSummary(budget),
     closed = budget.status === "CLOSED";
@@ -217,14 +224,7 @@ export function Envelopes({
                       value={Math.min(l.spent, l.capacity || 1)}
                       max={l.capacity || 1}
                     />
-                    <div className="envelope-mobile-overview">
-                      <dl>
-                        <div><dt>Prévu ce mois</dt><dd>{euro(l.plannedCents)}</dd></div>
-                        <div><dt>Dépensé</dt><dd>{euro(l.spent)}</dd></div>
-                      </dl>
-                      {l.funded < l.capacity && <p className="text-amber">À financer : {euro(l.capacity - l.funded)}</p>}
-                      {l.remaining < 0 && <p className="text-red">Dépassement du prévu : {euro(-l.remaining)}</p>}
-                    </div>
+                    <EnvelopeFunding line={l} />
                     <MobileDetails label={readOnly || closed ? "Détails" : "Détails et actions"} name={l.name}>
                     <dl className="line-numbers">
                       <div className="envelope-planned-row">
@@ -232,7 +232,7 @@ export function Envelopes({
                         <dd>{euro(l.plannedCents)}</dd>
                       </div>
                       {l.opening > 0 && (
-                        <div>
+                        <div className="envelope-opening-row">
                           <dt>Réserve reportée</dt>
                           <dd>{euro(l.opening)}</dd>
                         </div>
@@ -296,6 +296,13 @@ export function Envelopes({
                             ? "Saisir un paiement"
                             : "Ajouter une dépense"}
                         </button>
+                        {!compact && actions.potTransfer && (
+                          <button className="secondary" onClick={() => actions.potTransfer?.(l.id)}
+                            aria-label={`Alimenter depuis le pot commun · ${l.name}`}
+                            disabled={potAvailableCents <= 0} title={potAvailableCents <= 0 ? "Le pot commun est vide." : "Ajouter un renfort à cette enveloppe"}>
+                            <ArrowDownLeft size={15} /> Depuis le pot commun
+                          </button>
+                        )}
                         {!compact && (
                           <>
                             <button
@@ -328,7 +335,10 @@ export function Envelopes({
                     )}
                     </MobileDetails>
                     {!compact && (
-                      <EnvelopeExpenses key={`${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
+                      <>
+                        <EnvelopeExpenses key={`expenses:${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
+                        <EnvelopePotTransfers key={`transfers:${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
+                      </>
                     )}
                   </article>
                 );
@@ -482,6 +492,7 @@ export function CommonPot({
   readOnly?: boolean;
 }) {
   const pot = potSummary(state);
+  const currentSummary = budgetSummary(state.budget);
   const entries = [
     ...pot.credits
       .filter((b) => b.closedPotCents > 0)
@@ -492,6 +503,7 @@ export function CommonPot({
         description: "Surplus · " + b.label,
         amount: b.closedPotCents,
         expense: undefined as PotExpense | undefined,
+        transfer: undefined as PotTransfer | undefined,
       })),
     ...state.potExpenses.map((e) => ({
       id: e.id,
@@ -500,7 +512,17 @@ export function CommonPot({
       description: e.description,
       amount: -e.amountCents,
       expense: e,
+      transfer: undefined as PotTransfer | undefined,
     })),
+    ...[state.budget, ...state.archivedBudgets].flatMap((budget) => budget.potTransfers.map((transfer) => ({
+      id: `transfer-${budget.id}-${transfer.id}`,
+      month: budget.id,
+      date: displayDate(transfer.date),
+      description: `Vers ${budget.lines.find((line) => line.id === transfer.lineId)?.name ?? "une enveloppe"}${transfer.note ? ` · ${transfer.note}` : ""}`,
+      amount: -transfer.amountCents,
+      expense: undefined as PotExpense | undefined,
+      transfer,
+    }))),
   ].sort((a, b) => b.month.localeCompare(a.month) || b.id.localeCompare(a.id));
   return (
     <>
@@ -536,26 +558,18 @@ export function CommonPot({
         />
         <Metric
           icon={ShoppingBag}
-          label="Utilisé dans le pot"
+          label="Achats du pot"
           value={euro(pot.spentCents)}
           detail="Achats déjà effectués"
         />
         <Metric
           icon={Wallet}
-          label={
-            budgetSummary(state.budget).missingCents
-              ? "Réserves prévues"
-              : "Réserves affectées"
-          }
-          value={euro(budgetSummary(state.budget).reservedCents)}
-          detail={
-            budgetSummary(state.budget).missingCents
-              ? "Report et provisions une fois financées"
-              : "Conservées séparément du pot commun"
-          }
+          label="Affecté aux enveloppes"
+          value={euro(pot.transferredCents)}
+          detail="Transferts internes depuis le pot"
         />
       </div>
-      <section className="panel">
+      <section className="panel common-pot-movements">
         <div className="section-head">
           <div>
             <h2>Mouvements du pot commun</h2>
@@ -564,14 +578,22 @@ export function CommonPot({
               surplus ne crée aucun virement bancaire.
             </p>
           </div>
-          {!readOnly && <button
+          {!readOnly && <div className="pot-movement-actions">
+          {state.budget.status === "ACTIVE" && actions.potTransfer && <button
+            className="secondary"
+            disabled={pot.availableCents <= 0 || !state.budget.lines.length}
+            onClick={() => actions.potTransfer?.()}
+          >
+            <ArrowDownLeft size={17} /> Alimenter une enveloppe
+          </button>}
+          <button
             className="primary"
             disabled={pot.availableCents <= 0}
             onClick={() => actions.potExpense()}
           >
             <Plus size={17} />
             Utiliser le pot commun
-          </button>}
+          </button></div>}
         </div>
         {!entries.length && (
           <Empty>
@@ -595,7 +617,7 @@ export function CommonPot({
               <div>
                 <strong>{entry.description}</strong>
                 <small>
-                  {entry.date} · <span className="badge green">Pot commun</span>
+                  {entry.date} · <span className="badge green">{entry.transfer ? "Transfert interne" : "Pot commun"}</span>
                 </small>
               </div>
               <b className={entry.amount >= 0 ? "text-green" : ""}>
@@ -619,6 +641,13 @@ export function CommonPot({
                     <Trash2 size={16} />
                   </button>
                 </div>
+              )}
+              {!readOnly && entry.transfer && entry.month === state.budget.id && state.budget.status === "ACTIVE" && actions.removePotTransfer && (
+                <button className="secondary" onClick={() => actions.removePotTransfer?.(entry.transfer!.id)}
+                  disabled={(currentSummary.lines.find((line) => line.id === entry.transfer!.lineId)?.available ?? 0) < entry.transfer.amountCents}
+                  aria-label={`Annuler le transfert vers ${entry.description.slice(5)}`}>
+                  Annuler le transfert
+                </button>
               )}
             </div>
           ))}
@@ -724,6 +753,15 @@ export function History({ state }: { state: AppState }) {
                       <span className="badge green">Pot commun</span>
                     </p>
                   ))}
+                </>
+              )}
+              {b.potTransfers.length > 0 && (
+                <>
+                  <h3>Transferts depuis le pot commun</h3>
+                  {b.potTransfers.map((transfer) => <p key={transfer.id}>
+                    {displayDate(transfer.date)} · Vers {b.lines.find((line) => line.id === transfer.lineId)?.name}
+                    {transfer.note ? ` · ${transfer.note}` : ""} · {euro(transfer.amountCents)} · Transfert interne
+                  </p>)}
                 </>
               )}
               <h3>Dépenses des enveloppes</h3>

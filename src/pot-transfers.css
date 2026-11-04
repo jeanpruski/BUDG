@@ -1,0 +1,101 @@
+.envelope-funding {
+  margin-bottom: 8px;
+}
+.envelope-funding > dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.envelope-funding > dl > div {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+}
+.envelope-funding dt {
+  color: var(--muted);
+  line-height: 1.4;
+}
+.envelope-funding dd {
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.envelope-funding > p {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.envelope .line-numbers .envelope-planned-row,
+.envelope .line-numbers .envelope-spent-row,
+.envelope .line-numbers .envelope-opening-row,
+.envelope .envelope-funding-hint {
+  display: none;
+}
+.envelope-pot-transfers {
+  margin-top: 0;
+}
+.pot-transfer-preview {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f9f3;
+}
+.pot-transfer-form button:disabled {
+  cursor: not-allowed;
+}
+.pot-transfer-preview dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.pot-transfer-preview dd {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.pot-transfer-preview p {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+.pot-transfer-preview > p:first-child {
+  margin-top: 0;
+}
+.pot-movement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pot-transfer-tag {
+  color: #315d48;
+  background: #edf2e9;
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+@media (max-width: 640px) {
+  .common-pot-movements > .section-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .common-pot-movements .pot-movement-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .common-pot-movements .pot-movement-actions > button {
+    min-width: 0;
+    max-width: none;
+  }
+  .envelope-funding {
+    margin-bottom: 0;
+  }
+  .pot-transfer-preview {
+    padding: 10px;
+  }
+  .pot-transfer-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
