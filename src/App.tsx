@@ -27,7 +27,6 @@ import {
   History as HistoryIcon,
   Home,
   Plus,
-  Receipt,
   Settings,
   Users,
   WalletCards,
@@ -84,7 +83,6 @@ import { Field, Form, Metric, Modal } from "./ui";
 type View =
   | "dashboard"
   | "budget"
-  | "expenses"
   | "payments"
   | "pot"
   | "history"
@@ -108,7 +106,6 @@ type Dialog =
 const navigation = [
   ["dashboard", "Vue d’ensemble", Home],
   ["budget", "Enveloppes", WalletCards],
-  ["expenses", "Dépenses", Receipt],
   ["payments", "Versements", Users],
   ["pot", "Pot commun", ArrowRight],
   ["history", "Historique", HistoryIcon],
@@ -437,7 +434,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                 {busy ? "Enregistrement…" : "En local"}
               </span>
             )}
-            {!readOnly && view !== "dashboard" && b.status === "ACTIVE" && state.configured && (
+            {!readOnly && view === "budget" && b.status === "ACTIVE" && state.configured && (
               <button
                 className="primary"
                 disabled={busy || !b.lines.length}
@@ -582,9 +579,6 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} />
                   <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>
-              )}
-              {view === "expenses" && (
-                <Transactions budget={b} actions={actions} mode="expenses" readOnly={readOnly} />
               )}
               {view === "payments" && (
                 <>

@@ -1,0 +1,169 @@
+.history-journal {
+  margin-bottom: 24px;
+}
+.history-journal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.history-journal-header > div {
+  min-width: 0;
+}
+.history-journal h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+.history-journal-header p {
+  margin: 0;
+  font-size: 12px;
+}
+.history-journal .history-journal-total {
+  display: grid;
+  flex-shrink: 0;
+  gap: 4px;
+  text-align: right;
+}
+.history-journal-total > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-journal-total > strong {
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+}
+.history-journal-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 12px;
+  margin: 20px 0 5px;
+}
+.history-journal-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.history-journal-field input,
+.history-journal-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.history-journal-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.history-journal-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.history-journal-entry:last-child {
+  border-bottom: 0;
+}
+.history-journal-copy {
+  min-width: 0;
+}
+.history-journal-copy > strong {
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.history-journal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.history-journal-pot {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #edf2e9;
+  color: #315d48;
+}
+.history-journal-amount {
+  white-space: nowrap;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.history-journal-empty {
+  margin: 0;
+  padding: 28px 0 14px;
+  font-size: 12px;
+  text-align: center;
+}
+.history-journal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-journal-footer .secondary {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .history-journal-header {
+    display: grid;
+    gap: 14px;
+  }
+  .history-journal .history-journal-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    text-align: left;
+  }
+  .history-journal-total > strong {
+    font-size: 21px;
+  }
+  .history-journal-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 8px;
+    margin-top: 16px;
+  }
+  .history-journal-field:first-child {
+    grid-column: 1 / -1;
+  }
+  .history-journal-field input,
+  .history-journal-field select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .history-journal-entry {
+    grid-template-columns: minmax(0, 1fr) fit-content(50%);
+    gap: 10px;
+    padding: 12px 0;
+  }
+  .history-journal-copy > strong,
+  .history-journal-amount {
+    font-size: 12px;
+  }
+  .history-journal-amount {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+}

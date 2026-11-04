@@ -1,5 +1,7 @@
 import { HeroArt } from "./visuals";
 import { MobileDetails } from "./MobileDetails";
+import { EnvelopeExpenses } from "./EnvelopeExpenses";
+import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
 import {
   ArrowDownLeft,
@@ -325,6 +327,9 @@ export function Envelopes({
                       </button>
                     )}
                     </MobileDetails>
+                    {!compact && (
+                      <EnvelopeExpenses key={`${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
+                    )}
                   </article>
                 );
               })}
@@ -630,6 +635,8 @@ export function CommonPot({
 export function History({ state }: { state: AppState }) {
   return (
     <>
+      <HistoryJournal state={state} />
+      <h2>Bilans mensuels</h2>
       {[state.budget, ...state.archivedBudgets]
         .sort((a, b) => b.id.localeCompare(a.id))
         .map((b) => {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BudgetGuide } from "./guide";
 import { MonthClosing } from "./MonthClosing";
-import { Actions, CommonPot, Dashboard, Envelopes, Members, Transactions } from "./screens";
+import { Actions, CommonPot, Dashboard, Envelopes, History, Members, Transactions } from "./screens";
 import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, saveLineAmount, savePayment } from "./store";
 
 const actions: Actions = {
@@ -41,13 +41,13 @@ describe("interface en lecture seule", () => {
     const html = renderToStaticMarkup(<>
       <Envelopes budget={state.budget} actions={actions} readOnly />
       <Members budget={state.budget} actions={actions} readOnly />
-      <Transactions budget={state.budget} actions={actions} mode="expenses" readOnly />
       <Transactions budget={state.budget} actions={actions} mode="payments" readOnly />
       <CommonPot state={state} actions={actions} readOnly />
+      <History state={state} />
     </>);
-    expect(html).not.toMatch(/Ajouter une dépense|Ajouter un versement|Enregistrer un versement|Saisir un paiement|Utiliser le pot commun|Modifier l’opération|Supprimer l’opération|Montants par mois/);
+    expect(html).not.toMatch(/Ajouter une dépense|Ajouter un versement|Enregistrer un versement|Saisir un paiement|Utiliser le pot commun|Modifier l’opération|Supprimer l’opération|Modifier la dépense|Supprimer la dépense|Montants par mois/);
     expect(html).toContain('type="search"');
-    expect(html).toContain("Filtrer par enveloppe");
+    expect(html).toContain("Filtrer le journal par enveloppe");
     expect(html).not.toContain("disabled");
     expect(html).toContain("Achat réel");
     expect(html).toContain("Versement réel");
