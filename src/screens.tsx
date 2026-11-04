@@ -160,6 +160,7 @@ export function Envelopes({
           <div className="envelopes">
             {summary.lines
               .filter((l) => l.expenseGroup === group)
+              .sort((a, b) => Number(!!a.billClosure) - Number(!!b.billClosure))
               .map((l) => {
                 const billClosure = activeBillClosure(budget, l.id);
                 const late =
@@ -171,7 +172,7 @@ export function Envelopes({
                     today();
                 return (
                   <article
-                    className={`panel envelope envelope-${l.kind.toLowerCase()}`}
+                    className={`panel envelope envelope-${l.kind.toLowerCase()}${billClosure ? " envelope-closed" : ""}`}
                     key={l.id}
                   >
                     <div className="section-head">

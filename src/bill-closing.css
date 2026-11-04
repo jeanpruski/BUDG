@@ -1,3 +1,11 @@
+.envelope.envelope-closed {
+  background: #edf6ef;
+  border-color: #b5d4be;
+}
+.envelope.envelope-closed .envelope-symbol {
+  background: #dcefe2;
+  color: var(--green);
+}
 .bill-closing {
   margin-top: 12px;
   padding-top: 12px;
