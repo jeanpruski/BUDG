@@ -12,8 +12,9 @@ export type HistoryJournalEntry = {
   envelopeLabel: string;
   description: string;
   amountCents: number;
-  source: "envelope" | "pot" | "transfer";
+  source: "envelope" | "pot" | "transfer" | "billRelease" | "billReopen";
 };
+const internalEntry = (entry: HistoryJournalEntry) => entry.source === "transfer" || entry.source === "billRelease" || entry.source === "billReopen";
 
 /** Internal transfers stay distinct from spending; contributions are managed in Versements. */
 export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
@@ -48,6 +49,16 @@ export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
         source: "transfer",
       });
     }
+    for (const closure of budget.billClosures) {
+      const common = {
+        month: budget.id, monthLabel: budget.label, envelopeKey: `envelope:${closure.lineId}`,
+        envelopeLabel: names.get(closure.lineId) || "Ancienne enveloppe", amountCents: closure.amountCents,
+      };
+      entries.push({ ...common, id: `${budget.id}:bill:${closure.id}`, date: closure.date,
+        description: "Surplus de facture vers le pot commun", source: "billRelease" });
+      if (closure.reopened) entries.push({ ...common, id: `${budget.id}:bill-reopen:${closure.id}`, date: closure.reopened.date,
+        description: "Réouverture de facture depuis le pot commun", source: "billReopen" });
+    }
   }
   for (const expense of state.potExpenses) {
     const month = expense.date.slice(0, 7);
@@ -77,8 +88,8 @@ export function filterHistoryJournal(
   return entries.filter((entry) =>
     (!filters.month || entry.month === filters.month) &&
     (!filters.envelope || entry.envelopeKey === filters.envelope) &&
-    (!filters.kind || (filters.kind === "transfers" ? entry.source === "transfer" : entry.source !== "transfer")) &&
-    (!query || normalize(`${entry.description} ${entry.envelopeLabel} ${entry.source === "transfer" ? "transfert interne pot commun" : ""}`).includes(query)),
+    (!filters.kind || (filters.kind === "transfers" ? internalEntry(entry) : !internalEntry(entry))) &&
+    (!query || normalize(`${entry.description} ${entry.envelopeLabel} ${internalEntry(entry) ? "transfert interne pot commun" : ""}`).includes(query)),
   );
 }
 
@@ -108,8 +119,8 @@ export function HistoryJournal({ state }: { state: AppState }) {
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
   }, [entries]);
   const rows = filterHistoryJournal(entries, { search, month, envelope, kind });
-  const totalCents = rows.reduce((sum, entry) => sum + (entry.source === "transfer" ? 0 : entry.amountCents), 0);
-  const transferredCents = rows.reduce((sum, entry) => sum + (entry.source === "transfer" ? entry.amountCents : 0), 0);
+  const totalCents = rows.reduce((sum, entry) => sum + (internalEntry(entry) ? 0 : entry.amountCents), 0);
+  const transferredCents = rows.reduce((sum, entry) => sum + (internalEntry(entry) ? entry.amountCents : 0), 0);
   const visibleRows = rows.slice(0, visibleCount);
   return (
     <section className="panel history-journal" aria-labelledby={titleId}>
@@ -166,12 +177,12 @@ export function HistoryJournal({ state }: { state: AppState }) {
                 <div className="history-journal-meta">
                   <time dateTime={entry.date}>{displayDate(entry.date)}</time>
                   <span className={entry.source === "pot" ? "history-journal-pot" : ""}>
-                    {entry.source === "transfer" ? `Pot commun → ${entry.envelopeLabel}` : entry.envelopeLabel}
+                    {entry.source === "billRelease" ? `${entry.envelopeLabel} → Pot commun` : internalEntry(entry) ? `Pot commun → ${entry.envelopeLabel}` : entry.envelopeLabel}
                   </span>
-                  {entry.source === "transfer" && <span className="pot-transfer-tag">Transfert interne</span>}
+                  {internalEntry(entry) && <span className="pot-transfer-tag">Transfert interne</span>}
                 </div>
               </div>
-              <strong className="history-journal-amount">{entry.source === "transfer" ? "↔" : "−"}{euro(entry.amountCents)}</strong>
+              <strong className="history-journal-amount">{internalEntry(entry) ? "↔" : "−"}{euro(entry.amountCents)}</strong>
             </li>
           ))}
         </ol>

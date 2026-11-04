@@ -9,7 +9,7 @@ Une clôture anticipée et le rendez-vous du 1er produisent chacun leur email. L
 
 ## Ce que contient le message
 
-L’email HTML présente les dépenses réellement enregistrées, les versements reçus, les contributions de chacun, le solde calculé du compte commun, les réserves financées et le pot commun. Un graphique intégré répartit les dépenses entre appartement, vie quotidienne et achats du pot. Le prévu reste distinct de l’argent réellement reçu ou payé. Les renforts du pot vers une enveloppe sont identifiés comme transferts internes et restent exclus des dépenses et des versements. Les sauvegardes conservent aussi leur journal et les reports de réserve issus du pot.
+L’email HTML présente les dépenses réellement enregistrées, les versements reçus, les contributions de chacun, le solde calculé du compte commun, les réserves financées et le pot commun. Un graphique intégré répartit les dépenses entre appartement, vie quotidienne et achats du pot. Le prévu reste distinct de l’argent réellement reçu ou payé. Les renforts du pot vers une enveloppe, les surplus libérés à la clôture d’une facture et leur reprise lors d’une réouverture sont identifiés comme mouvements internes, exclus des dépenses et des versements. La clôture mensuelle ajoute seulement le surplus qui n’a pas déjà été libéré. Les sauvegardes conservent ces mouvements, leur journal et les reports de réserve issus du pot. Clôturer une facture ne déclenche pas d’email ; les envois restent liés au mois.
 
 Trois documents sont joints :
 

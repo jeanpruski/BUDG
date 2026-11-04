@@ -17,6 +17,7 @@ import {
   monthLabel,
   monthSchema,
   nextMonth,
+  nextPotOrder,
   sharesFor,
   today,
   validateState,
@@ -41,8 +42,9 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 6,
+    version: 7,
     revision: 0,
+    potSequence: 0,
     configured: false,
     members,
     incomeHistory: members.map((m) => ({
@@ -70,8 +72,10 @@ export function initialState(month = today().slice(0, 7)): AppState {
       expenses: [],
       payments: [],
       potTransfers: [],
+      billClosures: [],
       refunds: [],
       closedPotCents: 0,
+      closedOrder: 0,
     },
     archivedBudgets: [],
     potExpenses: [],
@@ -94,7 +98,13 @@ function active(s: AppState) {
     );
 }
 function withBudget(s: AppState, budget: Budget) {
-  return validateState({ ...s, budget });
+  const highest = Math.max(s.potSequence, budget.closedOrder, ...budget.potTransfers.map((entry) => entry.order),
+    ...budget.billClosures.flatMap((entry) => [entry.order, entry.reopened?.order ?? 0]));
+  return validateState({ ...s, budget, potSequence: highest });
+}
+function editableLine(s: AppState, lineId: string) {
+  if (s.budget.billClosures.some((closure) => closure.lineId === lineId && !closure.reopened))
+    throw new Error("Cette facture est clôturée. Rouvrez-la avant de modifier ses opérations ou son financement.");
 }
 export type LineAmountOptions = { month?: string; scope?: AmountScope };
 function checkAmountMonth(s: AppState, month: string, scope: AmountScope) {
@@ -139,6 +149,14 @@ export function saveLine(
 ): AppState {
   active(s);
   const old = s.budget.lines.find((l) => l.id === line.id);
+  if (old && s.budget.billClosures.some((closure) => closure.lineId === line.id && !closure.reopened)) {
+    const month = options?.month ?? s.budget.id;
+    const scope = options?.scope ?? "FROM_MONTH";
+    checkAmountMonth(s, month, scope);
+    if (month <= s.budget.id) editableLine(s, line.id);
+    const amountPlan = planLineAmount(old, line.plannedCents, month, scope);
+    return withBudget(s, { ...s.budget, lines: s.budget.lines.map((entry) => entry.id === old.id ? { ...old, amountPlan } : entry) });
+  }
   if (
     old &&
     s.budget.expenses.some((e) => e.lineId === old.id) &&
@@ -226,13 +244,15 @@ export function removeLineAmount(
     exceptions: line.amountPlan.exceptions.filter((exception) => scope !== "MONTH" || exception.month !== month),
   };
   const plannedCents = amountForMonth({ ...line, amountPlan }, s.budget.id);
+  const closed = s.budget.billClosures.some((closure) => closure.lineId === lineId && !closure.reopened);
+  if (closed && plannedCents !== line.plannedCents) editableLine(s, lineId);
   return withBudget(s, {
     ...s.budget,
     lines: s.budget.lines.map((entry) => entry.id === lineId ? {
       ...entry,
       amountPlan,
       plannedCents,
-      shares: sharesFor(plannedCents, entry.allocationType, s.budget.members, entry.customPercentages),
+      shares: closed ? entry.shares : sharesFor(plannedCents, entry.allocationType, s.budget.members, entry.customPercentages),
     } : entry),
   });
 }
@@ -240,6 +260,7 @@ export function removeLine(s: AppState, id: string) {
   active(s);
   if (
     s.budget.expenses.some((e) => e.lineId === id) ||
+    s.budget.billClosures.some((closure) => closure.lineId === id) ||
     s.budget.potTransfers.some((transfer) => transfer.lineId === id) ||
     (s.budget.lines.find((line) => line.id === id)?.openingPotCents ?? 0) > 0 ||
     s.budget.lines
@@ -247,7 +268,7 @@ export function removeLine(s: AppState, id: string) {
       ?.openingShares.some((x) => x.amountCents)
   )
     throw new Error(
-      "Une enveloppe avec des dépenses ou une réserve ne peut pas être supprimée.",
+      "Une enveloppe avec des opérations, une clôture de facture ou une réserve ne peut pas être supprimée.",
     );
   return withBudget(s, {
     ...s.budget,
@@ -256,6 +277,9 @@ export function removeLine(s: AppState, id: string) {
 }
 export function saveExpense(s: AppState, expense: Expense, settled: boolean) {
   active(s);
+  editableLine(s, expense.lineId);
+  const oldLineId = s.budget.expenses.find((entry) => entry.id === expense.id)?.lineId;
+  if (oldLineId) editableLine(s, oldLineId);
   if (expense.date > today())
     throw new Error(
       "Enregistrez une dépense uniquement après son paiement réel.",
@@ -280,6 +304,7 @@ export function saveExpense(s: AppState, expense: Expense, settled: boolean) {
 export function removeExpense(s: AppState, id: string) {
   active(s);
   const lineId = s.budget.expenses.find((e) => e.id === id)?.lineId;
+  if (lineId) editableLine(s, lineId);
   return withBudget(s, {
     ...s.budget,
     expenses: s.budget.expenses.filter((e) => e.id !== id),
@@ -310,6 +335,7 @@ export function removePayment(s: AppState, id: string) {
 }
 export function setSettled(s: AppState, lineId: string, settled: boolean) {
   active(s);
+  editableLine(s, lineId);
   return withBudget(s, {
     ...s.budget,
     lines: s.budget.lines.map((l) => (l.id === lineId ? { ...l, settled } : l)),
@@ -363,7 +389,7 @@ export function configureHousehold(
       budget: {
         ...result.budget,
         members: monthlyMembers,
-        lines: result.budget.lines.map((l) => ({
+        lines: result.budget.lines.map((l) => result.budget.billClosures.some((closure) => closure.lineId === l.id && !closure.reopened) ? l : ({
           ...l,
           shares: sharesFor(
             l.plannedCents,
@@ -377,8 +403,53 @@ export function configureHousehold(
   }
   return validateState(result);
 }
+function billDate(s: AppState) {
+  const month = s.budget.id;
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
+  const date = [today(), `${month}-${lastDay}`].sort()[0];
+  if (date.slice(0, 7) !== month) throw new Error("Clôturez la facture uniquement après son règlement réel dans le mois concerné.");
+  return date;
+}
+export function closeBill(s: AppState, lineId: string) {
+  active(s);
+  const line = budgetSummary(s.budget).lines.find((entry) => entry.id === lineId);
+  if (!line || line.kind !== "FIXED") throw new Error("Seule une facture du mois en cours peut être clôturée.");
+  if (line.billClosure) return s;
+  if (line.funded < Math.max(line.capacity, line.spent) || line.available < 0 ||
+      line.fundedShares.some((share) => share.amountCents < (line.shares.find((entry) => entry.memberId === share.memberId)?.amountCents ?? 0)))
+    throw new Error("Financez entièrement cette facture et son éventuel dépassement avant de la clôturer.");
+  const closure = {
+    id: uid(), lineId, date: billDate(s), amountCents: line.available,
+    plannedCents: line.plannedCents,
+    plannedShares: line.shares.map((share) => ({ ...share })),
+    fundingShares: line.fundedShares.map((share) => ({ ...share })),
+    order: nextPotOrder(s),
+  };
+  return withBudget(s, {
+    ...s.budget,
+    billClosures: [...s.budget.billClosures, closure],
+    lines: s.budget.lines.map((entry) => entry.id === lineId ? { ...entry, settled: true } : entry),
+  });
+}
+export function reopenBill(s: AppState, lineId: string) {
+  active(s);
+  const closure = s.budget.billClosures.find((entry) => entry.lineId === lineId && !entry.reopened);
+  if (!closure) throw new Error("Cette facture n’est pas clôturée.");
+  if (potSummary(s).availableCents < closure.amountCents)
+    throw new Error("Le pot commun doit pouvoir rendre la totalité du surplus libéré avant de rouvrir cette facture.");
+  const reopened = { date: billDate(s), order: nextPotOrder(s) };
+  return withBudget(s, {
+    ...s.budget,
+    billClosures: s.budget.billClosures.map((entry) => entry.id === closure.id ? { ...entry, reopened } : entry),
+    lines: s.budget.lines.map((entry) => entry.id === lineId ? {
+      ...entry, settled: false,
+      shares: sharesFor(entry.plannedCents, entry.allocationType, s.budget.members, entry.customPercentages),
+    } : entry),
+  });
+}
 export function closeMonth(s: AppState) {
-  return withBudget(s, closeBudget(s.budget));
+  if (s.budget.status === "CLOSED") return s;
+  return withBudget(s, closeBudget(s.budget, nextPotOrder(s)));
 }
 export function startNextMonth(s: AppState) {
   if (s.budget.status !== "CLOSED")
@@ -415,18 +486,23 @@ export function startNextMonth(s: AppState) {
       expenses: [],
       payments: [],
       potTransfers: [],
+      billClosures: [],
       refunds: [],
       closedPotCents: 0,
+      closedOrder: 0,
     },
   });
 }
-export function savePotExpense(s: AppState, expense: PotExpense) {
+export function savePotExpense(s: AppState, input: Omit<PotExpense, "order"> & { order?: number }) {
+  const previous = s.potExpenses.find((entry) => entry.id === input.id);
+  const expense: PotExpense = { ...input, order: previous?.order ?? nextPotOrder(s) };
   if (expense.date > today())
     throw new Error(
       "Enregistrez une dépense du pot commun après son paiement réel.",
     );
   return validateState({
     ...s,
+    potSequence: Math.max(s.potSequence, expense.order),
     potExpenses: s.potExpenses.some((e) => e.id === expense.id)
       ? s.potExpenses.map((e) => (e.id === expense.id ? expense : e))
       : [...s.potExpenses, expense],
@@ -438,8 +514,12 @@ export function removePotExpense(s: AppState, id: string) {
     potExpenses: s.potExpenses.filter((e) => e.id !== id),
   });
 }
-export function savePotTransfer(s: AppState, transfer: PotTransfer) {
+export function savePotTransfer(s: AppState, input: Omit<PotTransfer, "order"> & { order?: number }) {
   active(s);
+  editableLine(s, input.lineId);
+  const old = s.budget.potTransfers.find((entry) => entry.id === input.id);
+  if (old) editableLine(s, old.lineId);
+  const transfer: PotTransfer = { ...input, order: old?.order ?? nextPotOrder(s) };
   if (transfer.date > today())
     throw new Error("Enregistrez un transfert uniquement à sa date réelle, pas dans le futur.");
   const previous = s.budget.potTransfers.find((entry) => entry.id === transfer.id);
@@ -464,6 +544,7 @@ export function removePotTransfer(s: AppState, id: string) {
   active(s);
   const transfer = s.budget.potTransfers.find((entry) => entry.id === id);
   if (!transfer) throw new Error("Ce transfert n’existe pas.");
+  editableLine(s, transfer.lineId);
   const line = budgetSummary(s.budget).lines.find((entry) => entry.id === transfer.lineId);
   if (!line || line.available < transfer.amountCents)
     throw new Error("Cet argent a déjà été dépensé dans l’enveloppe ; ce transfert ne peut plus être annulé.");
@@ -475,6 +556,7 @@ export function resetState(s: AppState) {
     ...clean,
     configured: s.configured,
     revision: s.revision,
+    potSequence: s.potSequence,
     members: s.members,
     incomeHistory: s.incomeHistory,
     budget: {
@@ -541,6 +623,7 @@ export function resetEverything(s: AppState) {
   return validateState({
     ...clean,
     revision: s.revision,
+    potSequence: s.potSequence,
     members,
     budget: { ...clean.budget, members },
   });

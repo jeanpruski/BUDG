@@ -21,7 +21,7 @@ BEGIN
       AND conname = 'budg_state_version_check'
   ) THEN
     ALTER TABLE budg_state ADD CONSTRAINT budg_state_version_check
-      CHECK ((data->>'version')::integer IN (4, 5, 6));
+      CHECK ((data->>'version')::integer IN (4, 5, 6, 7));
   END IF;
 END
 $migration$;

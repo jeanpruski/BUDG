@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { accountBalance, budgetSummary, closeBudget, potSummary, validateState, type AppState, type BudgetLine, type PotTransfer } from "./domain";
+import { accountBalance, budgetSummary, closeBudget, nextPotOrder, potSummary, validateState, type AppState, type BudgetLine, type PotTransfer } from "./domain";
 import {
   closeMonth, configureHousehold, initialState, removeLine, removePotTransfer, resetState,
   saveExpense, saveLine, saveLineAmount, savePayment, savePotExpense, savePotTransfer, startNextMonth,
@@ -135,7 +135,8 @@ describe("annulation, protections et validation des transferts", () => {
     expect(state.budget.potTransfers).toHaveLength(1); expect(line(state).potAddedCents).toBe(15000);
     expect(potSummary(state).availableCents).toBe(35000);
     state = removePotTransfer(state, "transfer-1");
-    expect(state).toEqual(before);
+    expect(state.potSequence).toBeGreaterThan(before.potSequence);
+    expect({ ...state, potSequence: before.potSequence }).toEqual(before);
     expect(accountBalance(state)).toBe(accountBalance(before));
   });
   it("refuse d’annuler ou déplacer une somme dépensée, permet de réduire le reliquat disponible", () => {
@@ -181,10 +182,10 @@ describe("annulation, protections et validation des transferts", () => {
   });
   it("empêche qu’un transfert soit financé par le surplus qu’il crée à sa propre clôture", () => {
     const state = fund(envelope(household(), "target", 60000));
-    const forged: PotTransfer = { id: "circular", lineId: "target", amountCents: 10000, date: "2026-08-01", note: "Boucle" };
+    const forged: PotTransfer = { id: "circular", lineId: "target", amountCents: 10000, date: "2026-08-01", note: "Boucle", order: nextPotOrder(state) };
     const closed = closeBudget({ ...state.budget, potTransfers: [forged] });
     expect(closed.closedPotCents).toBe(70000);
-    expect(() => validateState({ ...state, budget: closed })).toThrow(/mois précédents/);
+    expect(() => validateState({ ...state, potSequence: closed.closedOrder, budget: closed })).toThrow(/alimenté/);
   });
   it("déduit ensemble les achats du pot et les transferts sans rejeter un achat après clôture le même jour", () => {
     let state = transfer(fund(envelope(withPot(10000), "target", 10000)), 10000);
@@ -199,12 +200,12 @@ describe("annulation, protections et validation des transferts", () => {
     let state = withPot(10000);
     state = savePotExpense(state, { id: "earlier", amountCents: 5000, date: "2026-08-31", description: "Ancien achat" });
     state = fund(envelope(state, "target", 10000));
-    const forged = closeBudget({ ...state.budget, potTransfers: [{ id: "overdraft", lineId: "target", amountCents: 6000, date: "2026-09-01", note: "" }] });
-    expect(() => validateState({ ...state, budget: forged })).toThrow(/mois précédents/);
+    const forged = closeBudget({ ...state.budget, potTransfers: [{ id: "overdraft", lineId: "target", amountCents: 6000, date: "2026-09-01", note: "", order: nextPotOrder(state) }] });
+    expect(() => validateState({ ...state, potSequence: forged.closedOrder, budget: forged })).toThrow(/alimenté/);
   });
   it("bloque le déplacement du démarrage si un transfert ou un report commun existe", () => {
     const state = envelope(household(), "target", 0, "RESERVE");
-    expect(trackingStartBlockReason({ ...state, budget: { ...state.budget, potTransfers: [{ id: "t", lineId: "target", amountCents: 1, date: "2026-08-01", note: "" }] } })).toMatch(/opérations/);
+    expect(trackingStartBlockReason({ ...state, budget: { ...state.budget, potTransfers: [{ id: "t", lineId: "target", amountCents: 1, date: "2026-08-01", note: "", order: 1 }] } })).toMatch(/opérations/);
     expect(trackingStartBlockReason({ ...state, budget: { ...state.budget, lines: [{ ...state.budget.lines[0], openingPotCents: 1 }] } })).toMatch(/réserve/);
   });
 });
@@ -218,7 +219,7 @@ describe("migration et conservation des anciens budgets", () => {
       for (const line of budget.lines) delete line.openingPotCents;
     }
     const migrated = validateState(raw);
-    expect(migrated.version).toBe(6); expect(migrated.budget.potTransfers).toEqual([]);
+    expect(migrated.version).toBe(7); expect(migrated.budget.potTransfers).toEqual([]);
     expect(migrated.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(accountBalance(migrated)).toBe(accountBalance(current));
     expect(potSummary(migrated).availableCents).toBe(potSummary(current).availableCents);

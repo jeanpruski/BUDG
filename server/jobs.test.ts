@@ -85,6 +85,25 @@ describe("fichiers privés et atomiques", () => {
     expect(() => parseServerSnapshot({ ...snapshot(), audit: [{ ...audit(), revision: "2" }] })).toThrow(/incohérent/);
     expect(() => parseServerSnapshot({ ...snapshot(), audit: [{ ...audit(), before_data: audit().after_data }] })).toThrow();
   });
+  it.each(["potExpense", "potTransfer"] as const)("restaure les anciennes traces %s sans ordre et contrôle un ordre présent", (type) => {
+    const old = { ...audit(), entity_type: type, after_data: {
+      id: "payment-1", amountCents: 100, date: "2026-09-29",
+      ...(type === "potExpense" ? { description: "Ancienne dépense" } : { lineId: "courses", note: "Ancienne affectation" }),
+    } };
+    expect(parseServerSnapshot({ ...snapshot(), audit: [old] }).audit).toHaveLength(1);
+    expect(() => parseServerSnapshot({ ...snapshot(), audit: [{ ...old, after_data: { ...old.after_data, order: 0 } }] })).toThrow();
+  });
+  it("conserve une trace de réouverture uniquement dans le mois de sa facture", () => {
+    const shares = [{ memberId: "jean", amountCents: 6000 }, { memberId: "miruna", amountCents: 4000 }];
+    const closure = { ...audit(), entity_type: "billClosure", after_data: {
+      id: "payment-1", lineId: "electricite", amountCents: 2000, date: "2026-09-29", order: 1,
+      plannedCents: 10000, plannedShares: shares, fundingShares: shares,
+      reopened: { date: "2026-09-30", order: 2 },
+    } };
+    expect(parseServerSnapshot({ ...snapshot(), audit: [closure] }).audit).toHaveLength(1);
+    const wrongMonth = { ...closure, after_data: { ...closure.after_data, reopened: { date: "2026-10-01", order: 2 } } };
+    expect(() => parseServerSnapshot({ ...snapshot(), audit: [wrongMonth] })).toThrow(/mauvais mois/);
+  });
 });
 
 const testUrl = process.env.TEST_DATABASE_URL;
@@ -247,7 +266,7 @@ describe.runIf(Boolean(testUrl))("tâches sur PostgreSQL", () => {
     const pending = (await pool.query("SELECT source_revision,published_revision FROM budg_monthly_archives WHERE month='2026-09'")).rows[0];
     expect(pending).toEqual({ source_revision: "2", published_revision: "1" });
     expect((await pool.query("SELECT revision FROM budg_state WHERE id=1")).rows[0].revision).toBe("2");
-    await saveBudget(pool, resetEverything(closed), closed.revision, editor, { now: new Date("2026-10-03T10:00:01Z") });
+    await saveBudget(pool, resetEverything(closed), closed.revision, editor, { now: new Date("2026-10-03T10:00:01Z"), allowHistoryRewrite: true });
     const result = await runJobs(config(), pool, { now: new Date("2026-10-03T12:00:00Z") });
     expect(result.status).toBe("completed");
     expect(result.daily).toBeUndefined();

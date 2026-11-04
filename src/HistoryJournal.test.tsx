@@ -26,8 +26,8 @@ function fixture(): AppState {
     older("2026-10", "octobre 2026", "Courses communes", 1300),
   ];
   state.potExpenses = [
-    { id: "pot-missing-month", amountCents: 700, date: "2026-09-20", description: "Étagère" },
-    { id: "pot-current", amountCents: 2500, date: "2026-11-01", description: "Lampe commune" },
+    { id: "pot-missing-month", amountCents: 700, date: "2026-09-20", description: "Étagère", order: 1 },
+    { id: "pot-current", amountCents: 2500, date: "2026-11-01", description: "Lampe commune", order: 2 },
   ];
   return state;
 }

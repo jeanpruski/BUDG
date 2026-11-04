@@ -11,6 +11,7 @@ import migrationSql from "./migrations/001_online.sql";
 import amountPlanMigrationSql from "./migrations/002_amount_plans.sql";
 import emailReportMigrationSql from "./migrations/003_email_reports.sql";
 import potTransferMigrationSql from "./migrations/004_pot_transfers.sql";
+import billClosureMigrationSql from "./migrations/005_bill_closures.sql";
 import { runReportEmails } from "./reportDelivery";
 import { readReportEmailSettings, deliverReportMessage } from "./reportMail";
 import { renderMonthlyReport } from "./monthlyReport";
@@ -53,6 +54,7 @@ export async function migrate(pool: Pool) {
     await client.query(amountPlanMigrationSql);
     await client.query(emailReportMigrationSql);
     await client.query(potTransferMigrationSql);
+    await client.query(billClosureMigrationSql);
     await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }

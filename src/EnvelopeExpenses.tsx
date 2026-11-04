@@ -13,7 +13,7 @@ export function EnvelopeExpenses({ budget, line, actions, readOnly = false }: {
   const expenses = budget.expenses
     .filter((expense) => expense.lineId === line.id)
     .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-  const editable = !readOnly && budget.status === "ACTIVE";
+  const editable = !readOnly && budget.status === "ACTIVE" && !budget.billClosures.some((entry) => entry.lineId === line.id && !entry.reopened);
 
   return (
     <details className="envelope-expenses">

@@ -292,13 +292,13 @@ describe("montants habituels et exceptions mensuelles", () => {
     const before = startNextMonth(closeMonth(fund(envelope(household(), "loan", 15769))));
     const legacy = JSON.parse(JSON.stringify({ ...before, version: 4 }));
     const migrated = validateState(legacy);
-    expect(migrated.version).toBe(6);
+    expect(migrated.version).toBe(7);
     expect(migrated.budget).toEqual(before.budget);
     expect(migrated.archivedBudgets).toEqual(before.archivedBudgets);
     expect(accountBalance(migrated)).toBe(accountBalance(before));
     expect(line(migrated).amountPlan).toBeUndefined();
     expect(amountForMonth(line(migrated), "2026-12")).toBe(15769);
     expect(stateSchema.safeParse(legacy).success).toBe(false);
-    expect(initialState().version).toBe(6);
+    expect(initialState().version).toBe(7);
   });
 });

@@ -179,12 +179,13 @@ export function ExpenseForm({
   busy: boolean;
   submit: (data: FormData) => void;
 }) {
+  const isClosed = (id: string) => state.budget.billClosures.some((closure) => closure.lineId === id && !closure.reopened);
   const [selected, setSelected] = useState(
-    expense?.lineId ?? lineId ?? state.budget.lines[0]?.id ?? "",
+    expense?.lineId ?? (lineId && !isClosed(lineId) ? lineId : state.budget.lines.find((entry) => !isClosed(entry.id))?.id) ?? "",
   );
   const line = budgetSummary(state.budget).lines.find((l) => l.id === selected);
   return (
-    <Form busy={busy} submit={submit}>
+    <Form busy={busy} canSubmit={!!line && !isClosed(line.id)} submit={submit}>
       <p className="hint">
         Saisissez uniquement une sortie réellement effectuée sur le compte
         commun.
@@ -198,8 +199,8 @@ export function ExpenseForm({
           onChange={(e) => setSelected(e.target.value)}
         >
           {state.budget.lines.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
+            <option key={l.id} value={l.id} disabled={isClosed(l.id)}>
+              {l.name}{isClosed(l.id) ? " · facture clôturée" : ""}
             </option>
           ))}
         </select>

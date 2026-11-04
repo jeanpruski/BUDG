@@ -8,7 +8,7 @@ export type PublicUser = { id: string; email: string; displayName: string; role:
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer"; month: string; id: string; value: unknown };
+type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer" | "billClosure"; month: string; id: string; value: unknown };
 export type MonthlyCaptureOptions = { timeZone?: string; now?: Date };
 type SaveOptions = MonthlyCaptureOptions & { allowHistoryRewrite?: boolean };
 function financialEntities(state: AppState | null): Map<string, AuditEntity> {
@@ -19,6 +19,7 @@ function financialEntities(state: AppState | null): Map<string, AuditEntity> {
     for (const value of month.expenses) add({ type: "expense", month: month.id, id: value.id, value });
     for (const value of month.payments) add({ type: "payment", month: month.id, id: value.id, value });
     for (const value of month.potTransfers) add({ type: "potTransfer", month: month.id, id: value.id, value });
+    for (const value of month.billClosures) add({ type: "billClosure", month: month.id, id: value.id, value });
   }
   for (const value of state.potExpenses)
     add({ type: "potExpense", month: value.date.slice(0, 7), id: value.id, value });
@@ -82,17 +83,62 @@ export async function captureMonthlyArchives(
 
 /** Ordinary edits preserve closed internal movements; explicit restores retain their audit trail. */
 function checkClosedPotMovements(before: AppState, after: AppState) {
+  if (after.potSequence < before.potSequence)
+    throw new ApiError(422, "L’ordre comptable enregistré est conservé. Utilisez une restauration explicite pour revenir à une sauvegarde.");
   const months = new Map([after.budget, ...after.archivedBudgets].map((month) => [month.id, month]));
   const movements = (budget: AppState["budget"]) => ({
+    closedOrder: budget.closedOrder,
     transfers: [...budget.potTransfers].sort((a, b) => a.id.localeCompare(b.id)),
+    billClosures: [...budget.billClosures].sort((a, b) => a.id.localeCompare(b.id)),
     openings: budget.lines.filter((line) => line.openingPotCents > 0)
       .map((line) => ({ id: line.id, amountCents: line.openingPotCents })).sort((a, b) => a.id.localeCompare(b.id)),
   });
   for (const month of [before.budget, ...before.archivedBudgets]) {
     if (month.status !== "CLOSED") continue;
     const next = months.get(month.id);
-    if (next ? !isDeepStrictEqual(movements(month), movements(next)) : month.potTransfers.length || month.lines.some((line) => line.openingPotCents > 0))
-      throw new ApiError(422, "Les transferts d’un mois clôturé sont verrouillés. Utilisez une restauration explicite pour revenir à une sauvegarde.");
+    if (next ? !isDeepStrictEqual(movements(month), movements(next)) : month.potTransfers.length || month.billClosures.length || month.lines.some((line) => line.openingPotCents > 0))
+      throw new ApiError(422, "Les mouvements d’un mois clôturé sont verrouillés. Utilisez une restauration explicite pour revenir à une sauvegarde.");
+  }
+  const ordered = (state: AppState) => new Map([
+    ...state.potExpenses.map((entry) => [`pot:${entry.id}`, entry.order] as const),
+    ...[state.budget, ...state.archivedBudgets].flatMap((month) => month.potTransfers.map((entry) => [`transfer:${month.id}:${entry.id}`, entry.order] as const)),
+    ...[state.budget, ...state.archivedBudgets].filter((month) => month.closedOrder > 0).map((month) => [`month:${month.id}`, month.closedOrder] as const),
+    ...[state.budget, ...state.archivedBudgets].flatMap((month) => month.billClosures.flatMap((closure) => [
+      [`bill:${month.id}:${closure.id}`, closure.order] as const,
+      ...(closure.reopened ? [[`bill-reopened:${month.id}:${closure.id}`, closure.reopened.order] as const] : []),
+    ])),
+  ]);
+  const previousOrders = ordered(before);
+  const nextOrders = ordered(after);
+  for (const [key, order] of previousOrders) {
+    if (nextOrders.has(key) && nextOrders.get(key) !== order)
+      throw new ApiError(422, "L’ordre d’un mouvement enregistré est conservé. Utilisez une restauration explicite pour revenir à une sauvegarde.");
+  }
+  for (const [key, order] of nextOrders) {
+    if (!previousOrders.has(key) && order <= before.potSequence)
+      throw new ApiError(422, "Un nouveau mouvement doit suivre le dernier ordre comptable enregistré.");
+  }
+  const finances = (line: AppState["budget"]["lines"][number] | undefined) => line && ({
+    kind: line.kind, expenseGroup: line.expenseGroup, allocationType: line.allocationType,
+    customPercentages: line.customPercentages, plannedCents: line.plannedCents,
+    shares: line.shares, openingShares: line.openingShares, openingPotCents: line.openingPotCents, settled: line.settled,
+  });
+  for (const month of [before.budget, ...before.archivedBudgets]) {
+    const next = months.get(month.id);
+    for (const closure of month.billClosures) {
+      const following = next?.billClosures.find((entry) => entry.id === closure.id);
+      const { reopened: wasReopened, ...original } = closure;
+      const { reopened: isReopened, ...followingOriginal } = following || {};
+      if (!following || !isDeepStrictEqual(original, followingOriginal) || (wasReopened && !isDeepStrictEqual(wasReopened, isReopened)))
+        throw new ApiError(422, "La trace d’une clôture de facture est conservée. Rouvrez la facture pour la corriger.");
+      if (!wasReopened && !isReopened) {
+        const sameLine = isDeepStrictEqual(finances(month.lines.find((line) => line.id === closure.lineId)), finances(next!.lines.find((line) => line.id === closure.lineId)));
+        const sameExpenses = isDeepStrictEqual(month.expenses.filter((entry) => entry.lineId === closure.lineId), next!.expenses.filter((entry) => entry.lineId === closure.lineId));
+        const sameTransfers = isDeepStrictEqual(month.potTransfers.filter((entry) => entry.lineId === closure.lineId), next!.potTransfers.filter((entry) => entry.lineId === closure.lineId));
+        if (!sameLine || !sameExpenses || !sameTransfers)
+          throw new ApiError(422, "Cette facture est clôturée. Rouvrez-la avant de modifier ses montants ou ses paiements.");
+      }
+    }
   }
 }
 

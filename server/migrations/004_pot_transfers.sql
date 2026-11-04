@@ -11,7 +11,7 @@ BEGIN
     EXECUTE format('ALTER TABLE budg_state DROP CONSTRAINT %I', legacy_check.conname);
   END LOOP;
   ALTER TABLE budg_state ADD CONSTRAINT budg_state_version_check
-    CHECK ((data->>'version')::integer IN (4, 5, 6));
+    CHECK ((data->>'version')::integer IN (4, 5, 6, 7));
 
   FOR legacy_check IN
     SELECT conname FROM pg_constraint
@@ -21,6 +21,6 @@ BEGIN
     EXECUTE format('ALTER TABLE budg_audit DROP CONSTRAINT %I', legacy_check.conname);
   END LOOP;
   ALTER TABLE budg_audit ADD CONSTRAINT budg_audit_entity_type_check
-    CHECK (entity_type IN ('expense', 'payment', 'potExpense', 'potTransfer'));
+    CHECK (entity_type IN ('expense', 'payment', 'potExpense', 'potTransfer', 'billClosure'));
 END
 $migration$;

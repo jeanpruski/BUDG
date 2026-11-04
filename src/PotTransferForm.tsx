@@ -10,7 +10,8 @@ export function PotTransferForm({ state, lineId, busy, submit }: {
   submit: (data: FormData) => void;
 }) {
   const previewId = useId();
-  const [selected, setSelected] = useState(lineId ?? state.budget.lines[0]?.id ?? "");
+  const isClosed = (id: string) => state.budget.billClosures.some((closure) => closure.lineId === id && !closure.reopened);
+  const [selected, setSelected] = useState(lineId && !isClosed(lineId) ? lineId : state.budget.lines.find((line) => !isClosed(line.id))?.id ?? "");
   const [amount, setAmount] = useState("");
   const pot = potSummary(state);
   const line = budgetSummary(state.budget).lines.find((entry) => entry.id === selected);
@@ -25,7 +26,7 @@ export function PotTransferForm({ state, lineId, busy, submit }: {
       if (cents > pot.availableCents) error = "Ce montant dépasse le pot commun disponible.";
     } catch { error = "Saisissez un montant positif avec deux décimales maximum."; }
   }
-  const ready = !!line && !error && cents > 0 && state.budget.status === "ACTIVE";
+  const ready = !!line && !isClosed(line.id) && !error && cents > 0 && state.budget.status === "ACTIVE";
   return (
     <div className="pot-transfer-form">
       <p>Disponible dans le pot commun : <strong>{euro(pot.availableCents)}</strong>.</p>
@@ -33,7 +34,7 @@ export function PotTransferForm({ state, lineId, busy, submit }: {
         <label className="field">
           Enveloppe à alimenter
           <select name="lineId" value={selected} required onChange={(event) => setSelected(event.target.value)}>
-            {state.budget.lines.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+            {state.budget.lines.map((entry) => <option key={entry.id} value={entry.id} disabled={isClosed(entry.id)}>{entry.name}{isClosed(entry.id) ? " · facture clôturée" : ""}</option>)}
           </select>
         </label>
         <div className="form-grid">

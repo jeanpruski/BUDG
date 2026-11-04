@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { budgetSummary, euro } from "./domain";
 import { MonthlyIncomeForm } from "./forms";
 import { monthlyIncomePreview } from "./monthlyIncome";
-import { configureHousehold, initialState, saveExpense, saveLine, saveLineAmount, saveMonthlyIncomes, savePayment } from "./store";
+import { closeBill, configureHousehold, initialState, saveExpense, saveLine, saveLineAmount, saveMonthlyIncomes, savePayment } from "./store";
 
 function fixture() {
   let state = configureHousehold(initialState("2026-08"), ["Jean", "Miruna"], [300000, 200000], "2026-08");
@@ -37,6 +37,24 @@ describe("aperçu des salaires mensuels", () => {
     const saved = budgetSummary(saveMonthlyIncomes(state, [400000, 100000], "2026-08").budget);
     expect(preview.map((member) => member.remaining)).toEqual(saved.balances.map((member) => member.remaining));
     expect(preview[0].remaining).toBe(36000);
+  });
+  it("préserve la répartition des factures clôturées dans l’aperçu courant et recalcule le mois suivant", () => {
+    let state = fixture();
+    state = saveLine(state, { ...state.budget.lines.find((line) => line.id === "courses")!, plannedCents: 100000, allocationType: "PRO_RATA" });
+    for (const [memberId, amountCents] of [["jean", 60000], ["miruna", 40000]] as const) {
+      state = savePayment(state, { id: `extra-${memberId}`, memberId, amountCents, date: "2026-08-02", note: "Financement du mois" });
+    }
+    state = closeBill(saveExpense(state, { id: "bill", lineId: "credit", amountCents: 80000, date: "2026-08-03", description: "Facture réglée" }, true), "credit");
+    const before = structuredClone(state);
+    const preview = monthlyIncomePreview(state, [100000, 400000], true);
+    const saved = budgetSummary(saveMonthlyIncomes(state, [100000, 400000], "2026-08").budget);
+    expect(preview.map((member) => [member.expected, member.paid, member.remaining])).toEqual(
+      saved.balances.map((member) => [member.expected, member.paid, member.remaining]),
+    );
+    expect(preview.map((member) => member.expected)).toEqual([80000, 120000]);
+    expect(preview.map((member) => member.remaining)).toEqual([0, 40000]);
+    expect(monthlyIncomePreview(state, [100000, 400000], false).map((member) => member.expected)).toEqual([40000, 160000]);
+    expect(state).toEqual(before);
   });
   it("estime le mois prochain sans reprendre les opérations du mois courant", () => {
     const state = saveExpense(fixture(), {

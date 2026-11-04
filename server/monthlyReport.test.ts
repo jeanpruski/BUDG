@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { budgetSummary, validateState, type AppState } from "../src/domain";
-import { closeMonth, configureHousehold, initialState, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, startNextMonth } from "../src/store";
+import { closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
 
@@ -46,6 +46,10 @@ function withTransfer() {
   let current = envelope(startNextMonth(previous), "Vacances", 60000, "DAILY_LIFE", "RESERVE");
   current = savePotTransfer(current, { id: "top-up", lineId: "Vacances", amountCents: 20000, date: "2026-09-02", note: "Renfort ponctuel" });
   return current;
+}
+function withClosedBill() {
+  const state = expense(fund(envelope(setup(), "Électricité", 10000, "HOUSING", "FIXED")), "Électricité", 8000);
+  return closeBill(state, "Électricité");
 }
 
 describe("comptes rendus mensuels par email", () => {
@@ -183,17 +187,74 @@ describe("comptes rendus mensuels par email", () => {
   it("rend toujours un ancien instantané V5 sans modifier sa source et joint son budget migré", async () => {
     const legacy = JSON.parse(JSON.stringify(history()));
     legacy.state.version = 5;
+    delete legacy.state.potSequence;
     for (const budget of [legacy.state.budget, ...legacy.state.archivedBudgets]) {
       delete budget.potTransfers;
+      delete budget.billClosures;
+      delete budget.closedOrder;
       for (const line of budget.lines) delete line.openingPotCents;
     }
+    for (const expense of legacy.state.potExpenses) delete expense.order;
     const before = JSON.stringify(legacy);
     const report = await renderMonthlyReport(legacy, "monthly");
     const state = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
-    expect(state.version).toBe(6);
+    expect(state.version).toBe(7);
     expect(state.budget.potTransfers).toEqual([]);
     expect(state.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(monthlyReportData(legacy).potBalanceCents).toBe(47655);
     expect(JSON.stringify(legacy)).toBe(before);
+  });
+  it("compte immédiatement le surplus d’une facture dans le pot sans créer une dépense ou un versement", async () => {
+    const raw = snapshot(withClosedBill());
+    const data = monthlyReportData(raw);
+    expect(data.closed).toBe(false);
+    expect(data.billReleasedCents).toBe(2000);
+    expect(data.billReopenedCents).toBe(0);
+    expect(data.potBalanceCents).toBe(2000);
+    expect(data.spentCents).toBe(8000);
+    expect(data.receivedCents).toBe(10000);
+    expect(data.accountBalanceCents).toBe(2000);
+    expect(data.operations.filter((operation) => operation.internal)).toMatchObject([{ type: "Facture clôturée", amountCents: 2000 }]);
+    const report = await renderMonthlyReport(raw, "monthly");
+    expect(report.html).toContain("Surplus de factures libéré ce mois");
+    expect(report.text).toContain("Surplus de factures libéré vers le pot ce mois");
+    const saved = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
+    expect(saved.budget.billClosures).toEqual(raw.state.budget.billClosures);
+  });
+  it("ne crédite pas de nouveau les factures déjà clôturées lors de la clôture mensuelle", () => {
+    const state = closeMonth(withClosedBill());
+    expect(state.budget.closedPotCents).toBe(0);
+    const data = monthlyReportData(snapshot(state));
+    expect(data.billReleasedCents).toBe(2000);
+    expect(data.potBalanceCents).toBe(2000);
+    expect(data.accountBalanceCents).toBe(2000);
+    expect(data.spentCents).toBe(8000);
+  });
+  it("montre le débit inverse d’une réouverture et le complément mensuel sans supprimer la trace du crédit initial", async () => {
+    const state = reopenBill(withClosedBill(), "Électricité");
+    const data = monthlyReportData(snapshot(state));
+    expect(data.billReleasedCents).toBe(2000);
+    expect(data.billReopenedCents).toBe(2000);
+    expect(data.potBalanceCents).toBe(0);
+    expect(data.accountBalanceCents).toBe(2000);
+    expect(data.operations.filter((operation) => operation.internal).map((operation) => operation.type)).toEqual(expect.arrayContaining(["Facture clôturée", "Facture rouverte"]));
+    expect(data.operations.filter((operation) => operation.internal).map((operation) => operation.type)).toEqual(["Facture rouverte", "Facture clôturée"]);
+    const final = closeMonth(setSettled(state, "Électricité", true));
+    expect(final.budget.closedPotCents).toBe(2000);
+    const closed = monthlyReportData(snapshot(final));
+    expect(closed.potBalanceCents).toBe(2000);
+    expect(closed.billReleasedCents).toBe(closed.billReopenedCents);
+    const report = await renderMonthlyReport(snapshot(final), "closed");
+    expect(report.html).toContain("Surplus ajouté à la clôture mensuelle");
+    expect(report.text).toContain("Surplus repris du pot lors des réouvertures");
+  });
+  it("exclut les crédits anticipés du mois suivant du bilan d’un mois archivé", () => {
+    const august = closeMonth(withClosedBill());
+    const september = closeBill(expense(fund(startNextMonth(august)), "Électricité", 8000), "Électricité");
+    const data = monthlyReportData(snapshot(september, "2026-08"));
+    expect(data.billReleasedCents).toBe(2000);
+    expect(data.potBalanceCents).toBe(2000);
+    expect(data.accountBalanceCents).toBe(2000);
+    expect(data.operations.filter((operation) => operation.internal)).toHaveLength(1);
   });
 });

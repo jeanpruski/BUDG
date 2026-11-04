@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
-import { dateSchema, monthSchema, validateState, type AppState } from "../src/domain";
+import { dateSchema, monthSchema, stateSchema, validateState, type AppState } from "../src/domain";
 import { captureMonthlyArchives } from "./storage";
 
 type JobConfig = { backupDir: string; timeZone: string };
@@ -27,8 +27,9 @@ const baseOperation = z.object({ id: z.string().min(1), amountCents: money, date
 const operationSchemas = {
   expense: baseOperation.extend({ lineId: z.string().min(1), description: z.string().max(200) }),
   payment: baseOperation.extend({ memberId: z.string().min(1), note: z.string().max(200) }),
-  potExpense: baseOperation.extend({ description: z.string().min(1).max(200) }),
-  potTransfer: baseOperation.extend({ lineId: z.string().min(1), note: z.string().max(200) }),
+  potExpense: baseOperation.extend({ description: z.string().min(1).max(200), order: z.number().int().positive().safe().optional() }),
+  potTransfer: baseOperation.extend({ lineId: z.string().min(1), note: z.string().max(200), order: z.number().int().positive().safe().optional() }),
+  billClosure: stateSchema.shape.budget.shape.billClosures.element,
 };
 const auditSchema = z.object({
   id: integerId,
@@ -36,7 +37,7 @@ const auditSchema = z.object({
   actor_user_id: z.string().uuid(),
   actor_email: z.string().min(1),
   actor_display_name: z.string().min(1),
-  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer"]),
+  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer", "billClosure"]),
   entity_id: z.string().min(1),
   entity_month: monthSchema,
   action: z.enum(["added", "updated", "deleted"]),
@@ -54,6 +55,11 @@ const auditSchema = z.object({
     const result = operationSchemas[entry.entity_type].safeParse(operation);
     if (!result.success || result.data.id !== entry.entity_id || result.data.date.slice(0, 7) !== entry.entity_month)
       context.addIssue({ code: z.ZodIssueCode.custom, message: "Opération du journal invalide." });
+    if (entry.entity_type === "billClosure") {
+      const closure = operationSchemas.billClosure.safeParse(operation);
+      if (closure.success && closure.data.reopened && closure.data.reopened.date.slice(0, 7) !== entry.entity_month)
+        context.addIssue({ code: z.ZodIssueCode.custom, message: "Réouverture rattachée au mauvais mois." });
+    }
   }
 });
 const snapshotSchema = z.object({

@@ -28,7 +28,7 @@ export function EnvelopePotTransfers({ budget, line, actions, readOnly = false }
               <time dateTime={transfer.date}>{displayDate(transfer.date)} · Transfert interne</time>
             </div>
             <strong>+{euro(transfer.amountCents)}</strong>
-            {!readOnly && budget.status === "ACTIVE" && actions.removePotTransfer && (
+            {!readOnly && budget.status === "ACTIVE" && !budget.billClosures.some((entry) => entry.lineId === line.id && !entry.reopened) && actions.removePotTransfer && (
               <div className="envelope-expense-actions">
                 <button type="button" className="icon-button" disabled={available < transfer.amountCents}
                   title={available < transfer.amountCents ? "Le montant n’est plus entièrement disponible dans cette enveloppe." : "Rendre ce montant au pot commun"}

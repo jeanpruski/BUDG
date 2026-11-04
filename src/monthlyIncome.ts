@@ -7,8 +7,12 @@ export function monthlyIncomePreview(state: AppState, incomes: number[], current
   }));
   const expected = Object.fromEntries(members.map((member) => [member.id, 0]));
   const month = current ? state.budget.id : nextMonth(state.budget.id);
+  const closedLines = new Set(current ? state.budget.billClosures.filter((closure) => !closure.reopened).map((closure) => closure.lineId) : []);
+  const previewShares = (line: AppState["budget"]["lines"][number]) => closedLines.has(line.id)
+    ? line.shares
+    : sharesFor(amountForMonth(line, month), line.allocationType, members, line.customPercentages);
   for (const line of state.budget.lines) {
-    for (const share of sharesFor(amountForMonth(line, month), line.allocationType, members, line.customPercentages)) {
+    for (const share of previewShares(line)) {
       expected[share.memberId] += share.amountCents;
     }
   }
@@ -17,7 +21,7 @@ export function monthlyIncomePreview(state: AppState, incomes: number[], current
     members,
     lines: state.budget.lines.map((line) => ({
       ...line,
-      shares: sharesFor(line.plannedCents, line.allocationType, members, line.customPercentages),
+      shares: previewShares(line),
     })),
   }) : null;
   return members.map((member) => {

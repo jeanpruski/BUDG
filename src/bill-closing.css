@@ -1,0 +1,58 @@
+.bill-closing {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.bill-closing > p {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.bill-closing .bill-closed-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+  color: var(--green);
+  font-weight: 600;
+  font-size: 12px;
+}
+.envelope .bill-closing > .text-button {
+  min-height: 40px;
+  font-size: 12px;
+}
+.bill-close-amounts {
+  margin: 16px 0;
+  padding: 10px 14px;
+  background: #f4f7ef;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.bill-close-amounts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.bill-close-amounts > div:last-child {
+  border-top: 1px solid var(--line);
+  color: var(--green);
+  font-weight: 600;
+}
+.bill-close-amounts dd {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.bill-close-form button:disabled {
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .bill-closing {
+    margin-top: 6px;
+    padding-top: 8px;
+  }
+  .bill-close-amounts {
+    padding: 8px 10px;
+  }
+}

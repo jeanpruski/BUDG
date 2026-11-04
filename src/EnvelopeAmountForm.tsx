@@ -22,17 +22,20 @@ export function EnvelopeAmountForm({
   busy,
   submit,
   remove,
+  closedBill = false,
 }: {
   line: BudgetLine;
   budgetMonth: string;
   busy: boolean;
   submit: (data: FormData) => void;
   remove: (month: string, scope: AmountScope) => void;
+  closedBill?: boolean;
 }) {
   const previewId = useId();
-  const [month, setMonth] = useState(budgetMonth);
+  const minimumMonth = closedBill ? nextMonth(budgetMonth) : budgetMonth;
+  const [month, setMonth] = useState(minimumMonth);
   const [scope, setScope] = useState<AmountScope>("MONTH");
-  const [amount, setAmount] = useState(() => inputAmount(amountForMonth(line, budgetMonth)));
+  const [amount, setAmount] = useState(() => inputAmount(amountForMonth(line, minimumMonth)));
   const plan = line.amountPlan ?? {
     baseCents: line.plannedCents,
     changes: [],
@@ -46,7 +49,7 @@ export function EnvelopeAmountForm({
   let previewLine: BudgetLine | null = null;
   try {
     const amountCents = parseMoney(amount, true);
-    if (monthSchema.safeParse(month).success && month >= budgetMonth) {
+    if (monthSchema.safeParse(month).success && month >= minimumMonth) {
       previewLine = {
         ...line,
         amountPlan: {
@@ -67,7 +70,7 @@ export function EnvelopeAmountForm({
   const scheduled = [
     ...plan.changes.map((change) => ({ month: change.fromMonth, amountCents: change.amountCents, scope: "FROM_MONTH" as const })),
     ...plan.exceptions.map((exception) => ({ ...exception, scope: "MONTH" as const })),
-  ].filter((entry) => entry.month >= budgetMonth)
+  ].filter((entry) => entry.month >= minimumMonth)
     .sort((a, b) => a.month.localeCompare(b.month) || a.scope.localeCompare(b.scope));
 
   return (
@@ -76,6 +79,7 @@ export function EnvelopeAmountForm({
         Montant habituel : <strong>{euro(habitual)}</strong> par mois.
         Vous pouvez prévoir un montant différent pour un seul mois ou changer le montant habituel.
       </p>
+      {closedBill && <p className="hint">Cette facture est clôturée pour le mois en cours. Vous pouvez programmer ses montants pour les mois suivants.</p>}
       <Form busy={busy} submit={submit} button="Enregistrer le montant">
         <div className="form-grid envelope-amount-fields">
           <label className="field">
@@ -83,7 +87,7 @@ export function EnvelopeAmountForm({
             <input
               type="month"
               name="amountMonth"
-              min={budgetMonth}
+              min={minimumMonth}
               value={month}
               required
               onChange={(event) => {

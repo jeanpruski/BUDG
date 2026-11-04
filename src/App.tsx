@@ -7,6 +7,7 @@ import { MonthClosing } from "./MonthClosing";
 import { MonthlyIncomePanel } from "./MonthlyIncomePanel";
 import { EnvelopeAmountForm } from "./EnvelopeAmountForm";
 import { PotTransferForm } from "./PotTransferForm";
+import { BillCloseForm, BillReopenForm, activeBillClosure } from "./BillClosing";
 import { TrackingStartForm, TrackingStartPanel } from "./TrackingStart";
 import { startTrackingAtMonth } from "./budgetStart";
 import { BudgetGuide, EnvelopeCoach } from "./guide";
@@ -50,6 +51,8 @@ import {
 } from "./domain";
 import {
   closeMonth,
+  closeBill,
+  reopenBill,
   configureHousehold,
   initialState,
   savePotExpense,
@@ -101,6 +104,7 @@ type Dialog =
   | { type: "coach" }
   | { type: "potExpense"; expense?: PotExpense }
   | { type: "potTransfer"; lineId?: string }
+  | { type: "billClose" | "billReopen"; lineId: string }
   | {
       type: "confirm";
       title: string;
@@ -304,6 +308,8 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
         (s) => setSettled(s, id, settled),
       ),
     close: () => open({ type: "close" }),
+    closeBill: (lineId) => open({ type: "billClose", lineId }),
+    reopenBill: (lineId) => open({ type: "billReopen", lineId }),
     next: () => open({ type: "monthlyIncome", mode: "open" }),
     potExpense: (expense) => open({ type: "potExpense", expense }),
     potTransfer: (lineId) => open({ type: "potTransfer", lineId }),
@@ -451,7 +457,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             {!readOnly && view === "budget" && b.status === "ACTIVE" && state.configured && (
               <button
                 className="primary"
-                disabled={busy || !b.lines.length}
+                disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
                 onClick={() => actions.expense()}
               >
                 <Plus size={17} />
@@ -850,6 +856,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               line={line}
               budgetMonth={b.id}
               busy={busy}
+              closedBill={!!activeBillClosure(b, line.id)}
               submit={(data) => attempt(() => {
                 const amount = parseMoney(data.get("amount"), true);
                 void commit(
@@ -1051,6 +1058,23 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           </Form>
         </Modal>
       )}
+      {!readOnly && (dialog?.type === "billClose" || dialog?.type === "billReopen") && (() => {
+        const line = summary.lines.find((entry) => entry.id === dialog.lineId);
+        if (!line || line.kind !== "FIXED") return null;
+        const closure = activeBillClosure(b, line.id);
+        return (
+          <Modal title={`${dialog.type === "billClose" ? "Clôturer" : "Rouvrir"} la facture · ${line.name}`} close={closeDialog}>
+            {activeDialogError}
+            {dialog.type === "billClose" && !closure && <BillCloseForm line={line} busy={busy} submit={() => {
+              void submit((s) => closeBill(s, line.id), "Facture clôturée. Son surplus est disponible dans le pot commun.");
+            }} />}
+            {dialog.type === "billReopen" && closure && <BillReopenForm amountCents={closure.amountCents}
+              potAvailableCents={potSummary(state).availableCents} busy={busy} submit={() => {
+                void submit((s) => reopenBill(s, line.id), "Facture rouverte. Son surplus a été repris du pot commun.");
+              }} />}
+          </Modal>
+        );
+      })()}
       {!readOnly && dialog?.type === "potTransfer" && (
         <Modal title="Alimenter depuis le pot commun" close={closeDialog}>
           {activeDialogError}

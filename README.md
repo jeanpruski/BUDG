@@ -63,11 +63,11 @@ Exemple avec des salaires de 3 000 € et 2 000 € : appartement prévu 1 000 �
 
 ## Trois types d’enveloppes
 
-- **Facture** : paiement réel à saisir et règlement complet à confirmer. Une échéance facultative signale les factures à vérifier. La confirmation seule ne crée pas de dépense.
+- **Facture** : après saisie des paiements et financement complet, **Clôturer la facture** verse immédiatement le surplus dans le pot commun, même avant la fin du mois. Les paiements et la provision de cette facture sont alors figés pour le mois courant ; les montants futurs restent programmables. La confirmation seule ne crée pas de dépense. **Rouvrir la facture** reprend son surplus depuis le pot pour permettre une correction, si les fonds sont disponibles.
 - **Dépenses courantes** : plusieurs achats possibles ; le solde non dépensé rejoint le pot commun à la clôture.
 - **Réserve** : le solde reste dans cette enveloppe et s’ajoute à la provision du mois suivant. Par exemple, 100 € reportés et une provision de 600 € demandent toujours 600 € de nouveaux versements, pour 700 € financés après réception. Un renfort de 200 € depuis le pot porte le total à 900 €. Les reports personnels et les sommes issues du pot restent distincts même si les salaires changent.
 
-À la clôture, le reliquat d’un renfort reste affecté à une enveloppe Réserve ; dans une Facture ou une enveloppe courante, le solde non dépensé rejoint le pot une seule fois. Les transferts ne créent ni achat ni versement personnel.
+À la clôture du mois, le reliquat d’un renfort reste affecté à une enveloppe Réserve ; dans une Facture ou une enveloppe courante, le solde non dépensé rejoint le pot une seule fois. Le surplus d’une facture déjà clôturée individuellement n’est pas crédité une seconde fois. Les transferts ne créent ni achat ni versement personnel.
 
 Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêter de l’alimenter, mettez sa contribution mensuelle à zéro. Cette version ne propose pas encore de libération manuelle d’une réserve vers le pot commun.
 
