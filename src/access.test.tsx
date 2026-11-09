@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { euro, type AppState } from "./domain";
 import { BudgetGuide } from "./guide";
 import { MonthClosing } from "./MonthClosing";
 import { Actions, CommonPot, Dashboard, Envelopes, History, Members, Transactions } from "./screens";
@@ -18,12 +19,37 @@ state = saveExpense(state, { id: "expense-1", lineId: "courses", amountCents: 10
 describe("interface en lecture seule", () => {
   it("présente un bilan consultatif sans actions de versement, dépense ou clôture", () => {
     const html = renderToStaticMarkup(<Dashboard state={state} />);
-    expect(html).toContain("Les dépenses du mois");
-    expect(html).toContain("Dépenses payées");
+    expect(html).toContain("Répartition du mois");
+    expect(html).toContain("Payé et réservé");
     expect(html).toContain("Mis de côté ce mois");
-    expect(html).not.toContain("<button");
+    const buttons = html.match(/<button\b[\s\S]*?<\/button>/g) ?? [];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toContain('aria-pressed="true"');
+    expect(buttons[0]).toContain("Réserves du mois");
     expect(html).not.toMatch(/Enregistrer un versement|Ajouter une dépense|Saisir un paiement|Vérifier et clôturer|Préparer le mois suivant/);
     expect(html).not.toContain("Confirmer : plus rien");
+  });
+  it("présente toutes les réserves dans un tableau distinguant la provision du mois et le disponible", () => {
+    const configured = configureHousehold(initialState("2026-08"), ["Camille", "Alex"], [300000, 200000], "2026-08");
+    let reserves: AppState = { ...configured, budget: { ...configured.budget, lines: [] } };
+    reserves = saveLine(reserves, { id: "financed", name: "Vacances financées", plannedCents: 10000, expenseGroup: "DAILY_LIFE", kind: "RESERVE" });
+    reserves = saveLine(reserves, { id: "unfunded", name: "Charges sans versement", plannedCents: 0, expenseGroup: "HOUSING", kind: "RESERVE" });
+    reserves = savePayment(reserves, { id: "camille", memberId: "jean", amountCents: 5000, date: "2026-08-01", note: "Versement reçu" });
+    reserves = savePayment(reserves, { id: "alex", memberId: "miruna", amountCents: 5000, date: "2026-08-01", note: "Versement reçu" });
+    reserves = saveExpense(reserves, { id: "purchase", lineId: "financed", amountCents: 2500, date: "2026-08-02", description: "Achat réel" }, false);
+    const html = renderToStaticMarkup(<Dashboard state={reserves} />);
+    const table = html.match(/<table\b[^>]*aria-label="Réserves par enveloppe"[\s\S]*?<\/table>/)?.[0];
+    expect(table).toBeDefined();
+    expect(table).toContain("Ce mois");
+    expect(table).toContain("Total disponible");
+    const rows = [...table!.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map((match) => match[1]);
+    const financed = rows.find((row) => row.includes("Vacances financées"));
+    const unfunded = rows.find((row) => row.includes("Charges sans versement"));
+    expect(financed).toContain(euro(10000));
+    expect(financed).toContain(euro(7500));
+    expect(unfunded).toBeDefined();
+    expect(unfunded!.split(euro(0))).toHaveLength(3);
+    expect(html).not.toMatch(/Ajouter une dépense|Enregistrer un versement|Clôturer cette facture|Rouvrir la facture|Alimenter depuis le pot commun/);
   });
   it("conserve la clôture et le mois suivant dans les enveloppes uniquement pour l’éditeur", () => {
     const active = renderToStaticMarkup(<MonthClosing budget={state.budget} actions={actions} />);

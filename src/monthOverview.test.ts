@@ -9,6 +9,7 @@ import {
   saveLine,
   savePayment,
   savePotExpense,
+  savePotTransfer,
   startNextMonth,
 } from "./store";
 
@@ -36,6 +37,15 @@ function expense(state: AppState, lineId: string, amountCents: number) {
   return saveExpense(state, { id: `expense-${state.budget.expenses.length}`, lineId, amountCents, date: `${state.budget.id}-02`, description: "Paiement réel" }, true);
 }
 
+function reserveCarry(includePot = false) {
+  let state = line(setup(), "vacances", 30000, "DAILY_LIFE", "RESERVE");
+  if (includePot) state = line(state, "source-pot", 20000, "DAILY_LIFE");
+  state = startNextMonth(closeMonth(paid(state)));
+  state = line(state, "vacances", 10000, "DAILY_LIFE", "RESERVE");
+  if (includePot) state = line(state, "source-pot", 0, "DAILY_LIFE");
+  return state;
+}
+
 describe("bilan synthétique du mois", () => {
   it("garde un graphique vide quand les enveloppes sont prévues mais encore impayées", () => {
     let state = line(setup(), "loyer", 100000, "HOUSING", "FIXED");
@@ -48,8 +58,9 @@ describe("bilan synthétique du mois", () => {
       reserveProvisions: {
         fundedCents: 0,
         availableCents: 0,
-        lines: [{ id: "vacances", name: "vacances", fundedCents: 0 }],
+        lines: [{ id: "vacances", name: "vacances", fundedCents: 0, availableCents: 0 }],
       },
+      retainedReserveCents: 0,
       categories: [
         { key: "housing", label: "Appartement", cents: 0 },
         { key: "daily", label: "Vie quotidienne", cents: 0 },
@@ -115,5 +126,90 @@ describe("bilan synthétique du mois", () => {
     expect(result.categories.map((category) => category.cents)).toEqual([0, 2500, 0]);
     expect(result.accountBalanceCents).toBe(-1500);
     expect(result.missingCents).toBe(9000);
+  });
+
+  it.each([
+    [0, 10000, 40000],
+    [25000, 10000, 15000],
+    [35000, 5000, 5000],
+    [40000, 0, 0],
+  ])("retient les nouvelles provisions après utilisation du report personnel : dépensé %s", (spentCents, retainedCents, availableCents) => {
+    let state = paid(reserveCarry());
+    if (spentCents) state = expense(state, "vacances", spentCents);
+    const before = structuredClone(state);
+    const result = monthOverview(state);
+    expect(result.reserveProvisions.fundedCents).toBe(10000);
+    expect(result.retainedReserveCents).toBe(retainedCents);
+    expect(result.reserveProvisions.availableCents).toBe(availableCents);
+    expect(result.reserveProvisions.lines).toEqual([{ id: "vacances", name: "vacances", fundedCents: 10000, availableCents }]);
+    expect(result.spentCents).toBe(spentCents);
+    expect(result.categories.map((category) => category.cents)).toEqual([0, spentCents, 0]);
+    expect(result.accountBalanceCents).toBe(availableCents);
+    expect(state).toEqual(before);
+  });
+
+  it("laisse un report disponible sans le présenter comme une nouvelle réserve du mois", () => {
+    const result = monthOverview(reserveCarry());
+    expect(result.reserveProvisions.fundedCents).toBe(0);
+    expect(result.retainedReserveCents).toBe(0);
+    expect(result.reserveProvisions.availableCents).toBe(30000);
+    expect(result.accountBalanceCents).toBe(30000);
+    expect(result.spentCents).toBe(0);
+  });
+
+  it("exclut le reliquat d’un renfort du pot du graphique des nouvelles réserves", () => {
+    let state = savePotTransfer(paid(reserveCarry(true)), {
+      id: "pot-to-reserve", lineId: "vacances", amountCents: 20000,
+      date: "2026-09-01", note: "Ancien argent du pot",
+    });
+    state = expense(state, "vacances", 50000);
+    const result = monthOverview(state);
+    expect(result.reserveProvisions.fundedCents).toBe(10000);
+    expect(result.reserveProvisions.availableCents).toBe(10000);
+    expect(result.retainedReserveCents).toBe(0);
+    expect(result.spentCents).toBe(50000);
+    expect(result.accountBalanceCents).toBe(10000);
+  });
+
+  it("exclut aussi un ancien report issu du pot quand la nouvelle provision personnelle a été dépensée", () => {
+    let state = line(setup(), "source-pot", 10000, "DAILY_LIFE");
+    state = line(state, "vacances", 0, "DAILY_LIFE", "RESERVE");
+    state = startNextMonth(closeMonth(paid(state)));
+    state = line(state, "source-pot", 0, "DAILY_LIFE");
+    state = savePotTransfer(state, {
+      id: "pot-to-reserve", lineId: "vacances", amountCents: 10000,
+      date: "2026-09-01", note: "Réserve commune de septembre",
+    });
+    state = startNextMonth(closeMonth(state));
+    state = paid(line(state, "vacances", 10000, "DAILY_LIFE", "RESERVE"));
+    state = expense(state, "vacances", 10000);
+    const result = monthOverview(state);
+    expect(budgetSummary(state.budget).lines.find((entry) => entry.id === "vacances")!.openingPotCents).toBe(10000);
+    expect(result.reserveProvisions.fundedCents).toBe(10000);
+    expect(result.reserveProvisions.availableCents).toBe(10000);
+    expect(result.retainedReserveCents).toBe(0);
+    expect(result.spentCents).toBe(10000);
+    expect(result.accountBalanceCents).toBe(10000);
+  });
+
+  it("plafonne chaque réserve séparément sans absorber la réserve B pour compenser les dépenses de A", () => {
+    let state = line(setup(), "reserve-a", 30000, "DAILY_LIFE", "RESERVE");
+    state = line(state, "reserve-b", 0, "DAILY_LIFE", "RESERVE");
+    state = startNextMonth(closeMonth(paid(state)));
+    state = line(state, "reserve-a", 10000, "DAILY_LIFE", "RESERVE");
+    state = paid(line(state, "reserve-b", 10000, "DAILY_LIFE", "RESERVE"));
+    state = paid(expense(state, "reserve-a", 50000));
+    const result = monthOverview(state);
+    const fundedA = budgetSummary(state.budget).lines.find((entry) => entry.id === "reserve-a")!.fundedShares.reduce((sum, share) => sum + share.amountCents, 0);
+    expect(fundedA).toBe(20000);
+    expect(result.reserveProvisions.lines).toEqual([
+      { id: "reserve-a", name: "reserve-a", fundedCents: 10000, availableCents: 0 },
+      { id: "reserve-b", name: "reserve-b", fundedCents: 10000, availableCents: 10000 },
+    ]);
+    expect(result.reserveProvisions.fundedCents).toBe(20000);
+    expect(result.reserveProvisions.availableCents).toBe(10000);
+    expect(result.retainedReserveCents).toBe(10000);
+    expect(result.spentCents).toBe(50000);
+    expect(result.accountBalanceCents).toBe(10000);
   });
 });

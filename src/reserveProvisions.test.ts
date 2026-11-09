@@ -40,9 +40,9 @@ const provision = (state: AppState) => monthlyReserveProvisions(budgetSummary(st
 describe("provisions personnelles des réserves reçues ce mois", () => {
   it("distingue 300 € reportés des 100 € nouvellement versés", () => {
     const before = withOpening();
-    expect(provision(before)).toEqual({ fundedCents: 0, availableCents: 30000, lines: [{ id: "vacances", name: "vacances", fundedCents: 0 }] });
+    expect(provision(before)).toEqual({ fundedCents: 0, availableCents: 30000, lines: [{ id: "vacances", name: "vacances", fundedCents: 0, availableCents: 30000 }] });
     const state = fund(before);
-    expect(provision(state)).toEqual({ fundedCents: 10000, availableCents: 40000, lines: [{ id: "vacances", name: "vacances", fundedCents: 10000 }] });
+    expect(provision(state)).toEqual({ fundedCents: 10000, availableCents: 40000, lines: [{ id: "vacances", name: "vacances", fundedCents: 10000, availableCents: 40000 }] });
     expect(accountBalance(state)).toBe(40000);
     expect(monthOverview(state).spentCents).toBe(0);
   });
@@ -50,26 +50,44 @@ describe("provisions personnelles des réserves reçues ce mois", () => {
   it("compte uniquement la part des versements partiels réellement affectée aux réserves", () => {
     let state = envelope(withOpening(), "courses", 10000, "VARIABLE");
     state = pay(state, "jean", 5000);
-    expect(provision(state)).toEqual({ fundedCents: 2500, availableCents: 32500, lines: [{ id: "vacances", name: "vacances", fundedCents: 2500 }] });
+    expect(provision(state)).toEqual({ fundedCents: 2500, availableCents: 32500, lines: [{ id: "vacances", name: "vacances", fundedCents: 2500, availableCents: 32500 }] });
     expect(budgetSummary(state.budget).lines.find((line) => line.id === "courses")!.funded).toBe(2500);
   });
 
   it("exclut les renforts venant du pot et leur report commun au mois suivant", () => {
     let state = withOpening(50000);
     state = savePotTransfer(state, { id: "top-up", lineId: "vacances", amountCents: 20000, date: "2026-11-09", note: "Depuis le pot" });
-    expect(provision(state)).toMatchObject({ fundedCents: 0, availableCents: 50000 });
+    expect(provision(state)).toMatchObject({ fundedCents: 0, availableCents: 50000, lines: [{ fundedCents: 0, availableCents: 50000 }] });
     state = fund(state);
-    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 60000 });
+    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 60000, lines: [{ fundedCents: 10000, availableCents: 60000 }] });
     state = startNextMonth(closeMonth(state));
     expect(state.budget.lines[0].openingPotCents).toBe(20000);
-    expect(provision(state)).toMatchObject({ fundedCents: 0, availableCents: 60000 });
+    expect(provision(state)).toMatchObject({ fundedCents: 0, availableCents: 60000, lines: [{ fundedCents: 0, availableCents: 60000 }] });
+  });
+
+  it("détaille le cumul de chaque réserve même sans versement du mois", () => {
+    let state = envelope(withOpening(50000), "travaux", 0);
+    state = savePotTransfer(state, { id: "works-top-up", lineId: "travaux", amountCents: 20000, date: "2026-11-09", note: "Travaux" });
+    expect(provision(state)).toEqual({
+      fundedCents: 0,
+      availableCents: 50000,
+      lines: [
+        { id: "vacances", name: "vacances", fundedCents: 0, availableCents: 30000 },
+        { id: "travaux", name: "travaux", fundedCents: 0, availableCents: 20000 },
+      ],
+    });
+    state = fund(state);
+    expect(provision(state).lines).toEqual([
+      { id: "vacances", name: "vacances", fundedCents: 10000, availableCents: 40000 },
+      { id: "travaux", name: "travaux", fundedCents: 0, availableCents: 20000 },
+    ]);
   });
 
   it("conserve les 100 € de provision après un achat et compte la dépense réelle une seule fois", () => {
     const funded = fund(withOpening());
     const before = accountBalance(funded);
     const state = spend(funded, "vacances", 25000);
-    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 15000 });
+    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 15000, lines: [{ fundedCents: 10000, availableCents: 15000 }] });
     expect(accountBalance(state)).toBe(before - 25000);
     expect(monthOverview(state).spentCents).toBe(25000);
     expect(budgetSummary(state.budget).spentCents).toBe(25000);
@@ -82,21 +100,21 @@ describe("provisions personnelles des réserves reçues ce mois", () => {
     state = pay(pay(state, "jean", 12000), "miruna", 2000);
     const summary = budgetSummary(state.budget);
     expect(summary.lines[0].fundedShares.map((share) => share.amountCents)).toEqual([12000, 2000]);
-    expect(provision(state)).toEqual({ fundedCents: 8000, availableCents: -6000, lines: [{ id: "taxe", name: "taxe", fundedCents: 8000 }] });
+    expect(provision(state)).toEqual({ fundedCents: 8000, availableCents: -6000, lines: [{ id: "taxe", name: "taxe", fundedCents: 8000, availableCents: -6000 }] });
     // Matching by member ID matters when one person has paid above their provision.
     const reordered = structuredClone(summary);
     reordered.lines[0].fundedShares.reverse();
     expect(monthlyReserveProvisions(reordered)).toEqual(provision(state));
     state = fund(state);
-    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 0 });
+    expect(provision(state)).toMatchObject({ fundedCents: 10000, availableCents: 0, lines: [{ fundedCents: 10000, availableCents: 0 }] });
     expect(monthOverview(state).spentCents).toBe(20000);
   });
 
   it("inclut chaque réserve même à zéro et exclut factures et dépenses courantes", () => {
     let state = envelope(envelope(envelope(envelope(household(), "vacances", 10000), "travaux", 0), "bill", 10000, "FIXED"), "courses", 5000, "VARIABLE");
-    expect(provision(state).lines).toEqual([{ id: "vacances", name: "vacances", fundedCents: 0 }, { id: "travaux", name: "travaux", fundedCents: 0 }]);
+    expect(provision(state).lines).toEqual([{ id: "vacances", name: "vacances", fundedCents: 0, availableCents: 0 }, { id: "travaux", name: "travaux", fundedCents: 0, availableCents: 0 }]);
     state = fund(state);
-    expect(provision(state)).toEqual({ fundedCents: 10000, availableCents: 10000, lines: [{ id: "vacances", name: "vacances", fundedCents: 10000 }, { id: "travaux", name: "travaux", fundedCents: 0 }] });
+    expect(provision(state)).toEqual({ fundedCents: 10000, availableCents: 10000, lines: [{ id: "vacances", name: "vacances", fundedCents: 10000, availableCents: 10000 }, { id: "travaux", name: "travaux", fundedCents: 0, availableCents: 0 }] });
     expect(provision(household())).toEqual({ fundedCents: 0, availableCents: 0, lines: [] });
   });
 
