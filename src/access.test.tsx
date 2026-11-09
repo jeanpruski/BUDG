@@ -19,7 +19,8 @@ describe("interface en lecture seule", () => {
   it("présente un bilan consultatif sans actions de versement, dépense ou clôture", () => {
     const html = renderToStaticMarkup(<Dashboard state={state} />);
     expect(html).toContain("Les dépenses du mois");
-    expect(html).toContain("Total dépensé");
+    expect(html).toContain("Dépenses payées");
+    expect(html).toContain("Mis de côté ce mois");
     expect(html).not.toContain("<button");
     expect(html).not.toMatch(/Enregistrer un versement|Ajouter une dépense|Saisir un paiement|Vérifier et clôturer|Préparer le mois suivant/);
     expect(html).not.toContain("Confirmer : plus rien");

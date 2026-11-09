@@ -45,6 +45,11 @@ describe("bilan synthétique du mois", () => {
       spentCents: 0,
       accountBalanceCents: 0,
       missingCents: 120000,
+      reserveProvisions: {
+        fundedCents: 0,
+        availableCents: 0,
+        lines: [{ id: "vacances", name: "vacances", fundedCents: 0 }],
+      },
       categories: [
         { key: "housing", label: "Appartement", cents: 0 },
         { key: "daily", label: "Vie quotidienne", cents: 0 },

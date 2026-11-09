@@ -1,4 +1,5 @@
 import { accountBalance, AppState, budgetSummary } from "./domain";
+import { monthlyReserveProvisions } from "./reserveProvisions";
 
 type Category = {
   key: "housing" | "daily" | "pot";
@@ -29,6 +30,7 @@ export function monthOverview(state: AppState) {
     spentCents: categories.reduce((total, category) => total + category.cents, 0),
     accountBalanceCents: accountBalance(state),
     missingCents: summary.missingCents,
+    reserveProvisions: monthlyReserveProvisions(summary),
     categories,
   };
 }

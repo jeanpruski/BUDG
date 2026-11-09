@@ -1,4 +1,11 @@
+.overview-monthly {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+}
 .overview-spending {
+  min-width: 0;
   margin: 0;
   padding: 30px 34px;
   border: 1px solid #e2e8dc;
@@ -52,6 +59,8 @@
   color: #294a37;
 }
 .overview-chart-total > span {
+  max-width: 65%;
+  text-align: center;
   color: #798572;
   font-size: 11px;
 }
@@ -113,7 +122,129 @@
   min-height: 132px;
   padding: 20px 24px;
 }
+.overview-savings {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 26px;
+  border: 1px solid #dae4ec;
+  border-radius: 18px;
+  background: #f2f6fa;
+  box-shadow: var(--shadow);
+}
+.overview-savings-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #3d617c;
+}
+.overview-savings-heading > svg {
+  flex-shrink: 0;
+}
+.overview-savings-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 550;
+  letter-spacing: -0.4px;
+}
+.overview-savings-total {
+  display: block;
+  margin-top: 18px;
+  color: #2d506b;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.overview-savings-note,
+.overview-savings-empty {
+  margin: 8px 0 14px;
+  color: #64798a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.overview-savings-breakdown {
+  margin: 0 0 16px;
+}
+.overview-savings-breakdown > div,
+.overview-reserve-balance dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 12px;
+}
+.overview-savings-breakdown > div + div {
+  border-top: 1px solid #dde6ee;
+}
+.overview-savings-breakdown dt {
+  color: #50697b;
+  overflow-wrap: anywhere;
+}
+.overview-savings-breakdown dd,
+.overview-reserve-balance dd {
+  color: #2d506b;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.overview-reserve-balance {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #cfdee9;
+}
+.overview-reserve-balance dl {
+  margin: 0;
+}
+.overview-reserve-balance dl > div {
+  padding: 0;
+}
+.overview-reserve-balance dt {
+  color: #50697b;
+}
+.overview-reserve-balance dd {
+  font-size: 18px;
+}
+.overview-reserve-balance dd.text-red {
+  color: #b24434;
+}
+.overview-reserve-balance p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+@media (max-width: 1280px) {
+  .overview-monthly {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 760px) {
+  .overview-monthly {
+    gap: 12px;
+  }
+  .overview-savings {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .overview-savings-heading h2 {
+    font-size: 18px;
+  }
+  .overview-savings-total {
+    margin-top: 10px;
+    font-size: 27px;
+  }
+  .overview-savings-note,
+  .overview-savings-empty {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .overview-savings-breakdown {
+    margin-bottom: 12px;
+  }
   .overview-spending {
     padding: 22px;
   }

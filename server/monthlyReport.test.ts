@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetSummary, validateState, type AppState } from "../src/domain";
+import { budgetSummary, euro, validateState, type AppState } from "../src/domain";
 import { closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
@@ -51,6 +51,14 @@ function withClosedBill() {
   const state = expense(fund(envelope(setup(), "Électricité", 10000, "HOUSING", "FIXED")), "Électricité", 8000);
   return closeBill(state, "Électricité");
 }
+function withReserveCarry(includePot = false) {
+  let state = envelope(setup(), "Vacances", 30000, "DAILY_LIFE", "RESERVE");
+  if (includePot) state = envelope(state, "Courses", 50000, "DAILY_LIFE");
+  state = startNextMonth(closeMonth(fund(state)));
+  state = saveLine(state, { ...state.budget.lines.find((line) => line.id === "Vacances")!, plannedCents: 10000 });
+  if (includePot) state = saveLine(state, { ...state.budget.lines.find((line) => line.id === "Courses")!, plannedCents: 0 });
+  return state;
+}
 
 describe("comptes rendus mensuels par email", () => {
   it("calcule le mois archivé et le solde de fin de mois sans intégrer les opérations suivantes", () => {
@@ -75,6 +83,7 @@ describe("comptes rendus mensuels par email", () => {
     expect(data.spentCents).toBe(0);
     expect(data.receivedCents).toBe(0);
     expect(data.reserveBalanceCents).toBe(0);
+    expect(data.reserveProvisions.fundedCents).toBe(0);
     const report = await renderMonthlyReport(raw, "monthly");
     expect(report.html).toContain("Aucune dépense enregistrée");
     expect(report.html).toContain("Bilan provisoire");
@@ -256,5 +265,50 @@ describe("comptes rendus mensuels par email", () => {
     expect(data.potBalanceCents).toBe(2000);
     expect(data.accountBalanceCents).toBe(2000);
     expect(data.operations.filter((operation) => operation.internal)).toHaveLength(1);
+  });
+  it("sépare 100 € provisionnés ce mois de 300 € reportés et conserve les totaux de dépenses et de banque", async () => {
+    const raw = snapshot(fund(withReserveCarry()));
+    const before = JSON.stringify(raw);
+    const data = monthlyReportData(raw);
+    expect(data.reserveProvisions.fundedCents).toBe(10000);
+    expect(data.reserveBalanceCents).toBe(40000);
+    expect(data.reserveProvisions.availableCents).toBe(40000);
+    expect(data.receivedCents).toBe(10000);
+    expect(data.spentCents).toBe(0);
+    expect(data.categories.reduce((sum, category) => sum + category.cents, 0)).toBe(0);
+    expect(data.accountBalanceCents).toBe(40000);
+    const report = await renderMonthlyReport(raw, "monthly");
+    expect(report.html).toContain("Mis de côté ce mois");
+    expect(report.text).toContain(`Mis de côté ce mois : ${euro(10000)}`);
+    const pdf = report.attachments.find((attachment) => attachment.contentType === "application/pdf")!;
+    expect((pdf.content.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length).toBe(3);
+    expect(JSON.stringify(raw)).toBe(before);
+  });
+  it("exclut les provisions impayées, les stocks, le pot et les compléments personnels au-delà du prévu", () => {
+    const reinforced = savePotTransfer(withReserveCarry(true), { id: "reserve-top-up", lineId: "Vacances", amountCents: 20000, date: "2026-09-01", note: "Ancien argent du pot" });
+    const unpaid = monthlyReportData(snapshot(reinforced));
+    expect(unpaid.reserveProvisions.fundedCents).toBe(0);
+    expect(unpaid.reserveBalanceCents).toBe(50000);
+    const state = fund(expense(fund(reinforced), "Vacances", 65000));
+    const data = monthlyReportData(snapshot(state));
+    expect(data.receivedCents).toBe(15000);
+    expect(data.reserveProvisions.fundedCents).toBe(10000);
+    expect(data.reserveBalanceCents).toBe(0);
+    expect(data.spentCents).toBe(65000);
+    expect(data.categories.reduce((sum, category) => sum + category.cents, 0)).toBe(65000);
+    expect(data.accountBalanceCents).toBe(30000);
+  });
+  it("calcule la mise de côté d’un mois archivé sans reprendre les nouvelles provisions du mois courant", () => {
+    const september = closeMonth(fund(withReserveCarry()));
+    let october = startNextMonth(september);
+    october = saveLine(october, { ...october.budget.lines.find((line) => line.id === "Vacances")!, plannedCents: 60000 });
+    october = fund(october);
+    const previous = monthlyReportData(snapshot(october, "2026-09"));
+    const current = monthlyReportData(snapshot(october));
+    expect(previous.reserveProvisions.fundedCents).toBe(10000);
+    expect(previous.reserveBalanceCents).toBe(40000);
+    expect(previous.receivedCents).toBe(10000);
+    expect(current.reserveProvisions.fundedCents).toBe(60000);
+    expect(current.reserveBalanceCents).toBe(100000);
   });
 });
