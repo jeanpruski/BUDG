@@ -5,9 +5,11 @@ import { Menu, X } from "lucide-react";
 export function MobileMenu({
   children,
   home,
+  footer,
 }: {
   children: (close: () => void) => ReactNode;
   home: () => void;
+  footer?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -81,6 +83,7 @@ export function MobileMenu({
         <nav aria-label="Navigation mobile">
           {children(() => setOpen(false))}
         </nav>
+        {footer && <div className="mobile-drawer-footer">{footer}</div>}
       </dialog>
     </div>
   );

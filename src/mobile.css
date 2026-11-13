@@ -21,19 +21,6 @@
   .header-actions {
     gap: 6px;
   }
-  .session-controls > span {
-    display: none;
-  }
-  .session-controls .secondary {
-    width: 40px;
-    min-width: 40px;
-    padding: 8px;
-    font-size: 0;
-  }
-  .session-controls .secondary svg {
-    width: 18px;
-    height: 18px;
-  }
   .header-actions .primary {
     min-height: 40px;
     padding: 8px 10px;

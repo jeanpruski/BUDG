@@ -380,7 +380,10 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   ) : null;
   return (
     <div className="app-shell">
-      <MobileMenu home={() => go("dashboard")}>
+      <MobileMenu
+        home={() => go("dashboard")}
+        footer={user && logout ? <SessionControls user={user} signOut={logout} /> : undefined}
+      >
         {(close) =>
           navigation.map(([id, title, Icon]) => (
             <button
@@ -429,11 +432,13 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           <div className="sidebar-note-line" />
         </div>
         <div className="sidebar-footer">
-          <span className="privacy-label">
-            <LockKeyhole size={12} />
-            {serverStorageMode ? "Serveur PostgreSQL" : "Local · vos données restent ici"}
-          </span>
-          <small>{state.members.map((m) => m.name).join(" & ")}</small>
+          {user && logout ? <SessionControls user={user} signOut={logout} /> : <>
+            <span className="privacy-label">
+              <LockKeyhole size={12} />
+              Local · vos données restent ici
+            </span>
+            <small>{state.members.map((m) => m.name).join(" & ")}</small>
+          </>}
         </div>
       </aside>
       <main>
@@ -448,7 +453,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             <h1>{navigation.find((n) => n[0] === view)?.[1]}</h1>
           </div>
           <div className="header-actions">
-            {user && logout ? <SessionControls user={user} signOut={logout} /> : (
+            {!(user && logout) && (
               <span className="saved">
                 {busy ? <Spinner small /> : <CheckCircle2 size={15} />}
                 {busy ? "Enregistrement…" : "En local"}
