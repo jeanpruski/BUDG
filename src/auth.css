@@ -8,7 +8,7 @@
 .session-controls > span { display:grid; gap:4px; min-width:0; overflow-wrap:anywhere; font-size:13px; }
 .session-controls small, .sidebar-footer .session-controls small { margin:0; color:#b3c9bc; font-size:11px; letter-spacing:normal; }
 .session-controls .secondary { width:100%; min-height:40px; background:#ffffff0d; border-color:#ffffff26; color:#e9f2ed; }
-.session-controls .secondary:hover { background:#ffffff1a; }
+.session-controls .secondary:not(:disabled):hover { background:#ffffff1a; border-color:#ffffff40; color:#fff; }
 .remote-viewer-notice { padding:12px 16px; background:#edf2e7; border:1px solid var(--line); border-radius:12px; margin-bottom:20px; font-size:12px; }
 .remote-waiting { max-width:650px; margin:40px auto; text-align:center; }
 @media(max-width:760px) { .auth-card { padding:26px; } }
