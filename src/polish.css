@@ -2231,13 +2231,9 @@ dialog::backdrop {
   }
 }
 
-.budget-heading {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-.budget-heading > div:first-child {
-  flex: 1;
-  min-width: 220px;
+.budget-toolbar {
+  justify-content: flex-end;
+  margin: 0 0 16px;
 }
 .budget-actions {
   display: flex;

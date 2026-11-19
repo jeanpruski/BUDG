@@ -61,33 +61,17 @@
   .text-button {
     min-height: 40px;
   }
-  .budget-heading {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .budget-heading > div:first-child {
-    display: contents;
-  }
-  .budget-heading h2 {
-    grid-column: 1;
-    grid-row: 1;
-    align-self: center;
-  }
-  .budget-heading .budget-actions {
+  .budget-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-    grid-column: 1 / -1;
     gap: 8px;
     width: 100%;
+    margin: 0 0 12px;
   }
   .budget-actions > button {
     min-width: 0;
     padding: 10px 8px;
     font-size: 11px;
-  }
-  .budget-heading p {
-    grid-column: 1 / -1;
-    margin: 0;
   }
   .monthly-income-panel .monthly-income-amounts dd {
     overflow-wrap: anywhere;

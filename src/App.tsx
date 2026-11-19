@@ -575,30 +575,20 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               {view === "dashboard" && <Dashboard state={state} />}
               {view === "budget" && (
                 <>
-                  <div className="section-head budget-heading">
-                    <div>
-                      <h2>Votre budget mensuel</h2>
-                      <p>
-                        Les montants habituels sont repris le mois suivant ; les exceptions restent limitées au mois choisi.
-                        L’argent n’est considéré reçu qu’après saisie d’un
-                        versement.
-                      </p>
+                  {!readOnly && b.status === "ACTIVE" && (
+                    <div className="budget-actions budget-toolbar">
+                      <button
+                        className="primary"
+                        disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
+                        onClick={() => actions.expense()}
+                      >
+                        <Plus size={17} aria-hidden="true" /> Une dépense
+                      </button>
+                      <button className="secondary" disabled={busy} onClick={() => actions.line()}>
+                        <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
+                      </button>
                     </div>
-                    {!readOnly && b.status === "ACTIVE" && (
-                      <div className="budget-actions">
-                        <button
-                          className="primary"
-                          disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
-                          onClick={() => actions.expense()}
-                        >
-                          <Plus size={17} aria-hidden="true" /> Une dépense
-                        </button>
-                        <button className="secondary" disabled={busy} onClick={() => actions.line()}>
-                          <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  )}
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} />
                   <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>
