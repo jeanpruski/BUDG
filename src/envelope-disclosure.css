@@ -9,6 +9,7 @@
 .envelope-card-trigger .envelope-name { font-size: 12px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
 .envelope-card-trigger .envelope-amount { display: block; }
 .envelope-card-trigger .envelope-amount strong { overflow-wrap: anywhere; }
+.envelope-card-trigger .envelope-amount-caption-mobile { display: none; }
 .envelope .envelope-card-trigger > progress { margin: 12px 0 6px; }
 .envelope-usage { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .envelope-usage > span { overflow-wrap: anywhere; min-width: 0; }

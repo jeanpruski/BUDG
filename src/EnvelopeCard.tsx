@@ -31,7 +31,8 @@ export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvai
         <span className={`badge ${tone}`}>{finished ? "Clôturé" : label}</span>
       </span>
       <span className="envelope-amount"><strong className={line.available < 0 ? "text-red" : undefined}>{euro(line.available)}</strong>
-        <span>{budget.status === "CLOSED" ? "solde de l’enveloppe à la clôture" : "financés, encore disponibles"}</span></span>
+        <span className="envelope-amount-caption">{budget.status === "CLOSED" ? "solde de l’enveloppe à la clôture" : "financés, encore disponibles"}</span>
+        <span className="envelope-amount-caption-mobile">{budget.status === "CLOSED" ? "À la clôture" : "Disponible"}</span></span>
       <progress aria-label={`Dépenses ${line.name}`} value={Math.min(line.spent, line.capacity || 1)} max={line.capacity || 1} />
       <span className="envelope-usage"><span>{euro(line.spent)} payés</span><span>Budget {euro(line.capacity)}</span></span>
     </button>
