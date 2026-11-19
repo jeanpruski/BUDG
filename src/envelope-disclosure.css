@@ -50,23 +50,6 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
-.envelope-disclosure-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 6px 0;
-  color: var(--green);
-  font-size: 11px;
-}
-.envelope-disclosure:not([open]) .envelope-hide-label,
-.envelope-disclosure[open] .envelope-show-label {
-  display: none;
-}
-.envelope-disclosure[open] > .envelope-summary .envelope-disclosure-hint > svg {
-  transform: rotate(180deg);
-}
 .envelope-details {
   margin-top: 0;
   padding: 14px 21px 21px;
@@ -81,9 +64,5 @@
   }
   .envelope-details {
     padding: 12px 14px 14px;
-  }
-  .envelope-disclosure-hint {
-    margin-top: 8px;
-    min-height: 28px;
   }
 }

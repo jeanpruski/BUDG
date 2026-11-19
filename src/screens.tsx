@@ -8,7 +8,6 @@ import { BillClosing, activeBillClosure } from "./BillClosing";
 import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
 import {
-  ChevronDown,
   ArrowDownLeft,
   Wallet,
   ShoppingBag,
@@ -233,7 +232,6 @@ export function Envelopes({
                       <span>{euro(l.spent)} payés</span>
                       <span>Budget {euro(l.capacity)}</span>
                     </div>
-                    <span className="envelope-disclosure-hint"><span className="envelope-show-label">Voir les détails</span><span className="envelope-hide-label">Masquer les détails</span><ChevronDown size={16} aria-hidden="true" /></span>
                     </summary>
                     <div className="envelope-details">
                     <p className="hint envelope-allocation">
