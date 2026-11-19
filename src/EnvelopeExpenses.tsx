@@ -4,11 +4,12 @@ import type { Actions } from "./screens";
 import { displayDate } from "./ui";
 import "./envelope-expenses.css";
 
-export function EnvelopeExpenses({ budget, line, actions, readOnly = false }: {
+export function EnvelopeExpenses({ budget, line, actions, readOnly = false, defaultOpen = false }: {
   budget: Budget;
   line: BudgetLine;
   actions: Actions;
   readOnly?: boolean;
+  defaultOpen?: boolean;
 }) {
   const expenses = budget.expenses
     .filter((expense) => expense.lineId === line.id)
@@ -16,9 +17,9 @@ export function EnvelopeExpenses({ budget, line, actions, readOnly = false }: {
   const editable = !readOnly && budget.status === "ACTIVE" && !budget.billClosures.some((entry) => entry.lineId === line.id && !entry.reopened);
 
   return (
-    <details className="envelope-expenses">
+    <details className="envelope-expenses" open={defaultOpen}>
       <summary aria-label={`Voir les dépenses · ${line.name} (${expenses.length})`}>
-        <span>Voir les dépenses</span>
+        <span>{defaultOpen ? "Paiements enregistrés" : "Voir les dépenses"}</span>
         <span className="envelope-expense-count">{expenses.length}</span>
         <ChevronDown size={16} aria-hidden="true" />
       </summary>

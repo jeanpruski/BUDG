@@ -1,10 +1,6 @@
 import { HeroArt } from "./visuals";
-import "./envelope-disclosure.css";
-import { EnvelopeExpenses } from "./EnvelopeExpenses";
-import { EnvelopeFunding } from "./EnvelopeFunding";
-import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
-import { EnvelopeMonthClosing } from "./EnvelopeMonthClosing";
-import { BillClosing, activeBillClosure } from "./BillClosing";
+import { EnvelopeCard } from "./EnvelopeCard";
+import { activeBillClosure } from "./BillClosing";
 import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
 import {
@@ -13,7 +9,6 @@ import {
   ShoppingBag,
   Sprout,
   House,
-  ReceiptText,
   Sparkles,
   CheckCircle2,
   ArrowUpRight,
@@ -33,7 +28,6 @@ import {
   potSummary,
   accountBalance,
   budgetSummary,
-  keepsReserve,
   envelopeMonthFinished,
   euro,
   today,
@@ -166,195 +160,8 @@ export function Envelopes({
             {summary.lines
               .filter((l) => l.expenseGroup === group)
               .sort((a, b) => Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)))
-              .map((l) => {
-                const billClosure = activeBillClosure(budget, l.id);
-                const late =
-                  l.kind === "FIXED" && !keepsReserve(l) &&
-                  l.capacity > 0 &&
-                  !l.settled &&
-                  l.dueDay &&
-                  `${budget.id}-${String(Math.min(l.dueDay, new Date(Number(budget.id.slice(0, 4)), Number(budget.id.slice(5)), 0).getDate())).padStart(2, "0")}` <
-                    today();
-                return (
-                  <article
-                    className={`panel envelope envelope-${l.kind.toLowerCase()}${billClosure || envelopeMonthFinished(l) ? " envelope-closed" : ""}`}
-                    key={`${budget.id}:${l.id}`}
-                  >
-                    <details className="envelope-disclosure">
-                    <summary className="envelope-summary" aria-label={`Détails de l’enveloppe · ${l.name}`}>
-                    <div className="section-head">
-                      <div className="envelope-title">
-                        <span className="envelope-symbol">
-                          {l.kind === "RESERVE" ? (
-                            <Sprout size={19} />
-                          ) : l.kind === "FIXED" ? (
-                            <ReceiptText size={19} />
-                          ) : (
-                            <ShoppingBag size={19} />
-                          )}
-                        </span>
-                        <h3>{l.name}</h3>
-                      </div>
-                      <span
-                        className={`badge ${envelopeMonthFinished(l) ? "green" : keepsReserve(l) ? "blue" : l.settled ? "green" : late ? "amber" : ""}`}
-                      >
-                        {envelopeMonthFinished(l) ? "Terminé pour ce mois" : keepsReserve(l)
-                          ? l.kind === "FIXED" ? "Report conservé" : "Réserve"
-                          : l.kind === "VARIABLE"
-                            ? "À consommer"
-                            : billClosure
-                              ? "Facture clôturée"
-                            : l.settled
-                              ? "Facture réglée"
-                              : l.capacity === 0
-                                ? "Rien à financer ce mois"
-                              : late
-                                ? "Échéance dépassée"
-                                : "Facture à régler"}
-                      </span>
-                    </div>
-                    <div className="envelope-amount">
-                      <strong className={l.available < 0 ? "text-red" : ""}>
-                        {euro(l.available)}
-                      </strong>
-                      <span>
-                        {closed
-                          ? "solde de l’enveloppe à la clôture"
-                          : "financés, encore disponibles"}
-                      </span>
-                    </div>
-                    <progress
-                      aria-label={`Dépenses ${l.name}`}
-                      value={Math.min(l.spent, l.capacity || 1)}
-                      max={l.capacity || 1}
-                    />
-                    <div className="envelope-usage">
-                      <span>{euro(l.spent)} payés</span>
-                      <span>Budget {euro(l.capacity)}</span>
-                    </div>
-                    </summary>
-                    <div className="envelope-details">
-                    <p className="hint envelope-allocation">
-                      {allocationLabel(l)}
-                      {l.allocationType === "CUSTOM" &&
-                        l.customPercentages
-                          ?.map(
-                            (p) =>
-                              ` · ${budget.members.find((m) => m.id === p.memberId)?.name} ${p.percent} %`,
-                          )
-                          .join("")}
-                    </p>
-                    <EnvelopeFunding line={l} />
-                    <dl className="line-numbers">
-                      <div className="envelope-planned-row">
-                        <dt>Prévu ce mois</dt>
-                        <dd>{euro(l.plannedCents)}</dd>
-                      </div>
-                      {l.opening > 0 && (
-                        <div className="envelope-opening-row">
-                          <dt>Réserve reportée</dt>
-                          <dd>{euro(l.opening)}</dd>
-                        </div>
-                      )}
-                      <div>
-                        <dt>Financé</dt>
-                        <dd>{euro(l.funded)}</dd>
-                      </div>
-                      <div className="envelope-spent-row">
-                        <dt>Dépensé</dt>
-                        <dd>{euro(l.spent)}</dd>
-                      </div>
-                      {!billClosure && <div>
-                        <dt>
-                          {l.remaining < 0 ? "Dépassement" : "Budget restant"}
-                        </dt>
-                        <dd className={l.remaining < 0 ? "text-red" : ""}>
-                          {euro(Math.abs(l.remaining))}
-                        </dd>
-                      </div>}
-                    </dl>
-                    {l.funded < l.capacity && (
-                      <p className="hint text-amber envelope-funding-hint">
-                        Il manque {euro(l.capacity - l.funded)} pour financer
-                        cette enveloppe.
-                      </p>
-                    )}
-                    {l.amountPlan && (l.amountPlan.changes.some((entry) => entry.fromMonth > budget.id) || l.amountPlan.exceptions.some((entry) => entry.month >= budget.id)) && (
-                      <p className="hint">Des montants spécifiques sont programmés par mois.</p>
-                    )}
-                    {keepsReserve(l) && (
-                      <p className="hint">
-                        Le solde est conservé le mois suivant et exclu des
-                        surplus du pot commun.
-                      </p>
-                    )}
-                    {l.dueDay && l.kind === "FIXED" && (
-                      <p className="hint">
-                        Échéance habituelle : le {l.dueDay} du mois.
-                      </p>
-                    )}
-                    {!compact && (
-                      <p className="hint">
-                        {budget.members
-                          .map(
-                            (m) =>
-                              `${m.name} : ${euro(l.shares.find((s) => s.memberId === m.id)?.amountCents ?? 0)}`,
-                          )
-                          .join(" · ")}
-                      </p>
-                    )}
-                    {!readOnly && !closed && (
-                      <div className="actions">
-                        {!compact && actions.amount && <button className="secondary" onClick={() => actions.amount?.(l)} aria-label={`Montants par mois · ${l.name}`}>Montants par mois</button>}
-                        {!billClosure && <button
-                          className="secondary"
-                          onClick={() => actions.expense(l.id)}
-                        >
-                          <Plus size={15} />
-                          {l.kind === "FIXED"
-                            ? "Saisir un paiement"
-                            : "Ajouter une dépense"}
-                        </button>}
-                        {!billClosure && !compact && actions.potTransfer && (
-                          <button className="secondary" onClick={() => actions.potTransfer?.(l.id)}
-                            aria-label={`Alimenter depuis le pot commun · ${l.name}`}
-                            disabled={potAvailableCents <= 0} title={potAvailableCents <= 0 ? "Le pot commun est vide." : "Ajouter un renfort à cette enveloppe"}>
-                            <ArrowDownLeft size={15} /> Depuis le pot commun
-                          </button>
-                        )}
-                        {!compact && !billClosure && (
-                          <>
-                            <button
-                              className="icon-button"
-                              aria-label={`Modifier ${l.name}`}
-                              onClick={() => actions.line(l)}
-                            >
-                              <Pencil size={17} />
-                            </button>
-                            <button
-                              className="icon-button danger"
-                              aria-label={`Supprimer ${l.name}`}
-                              onClick={() => actions.removeLine(l.id)}
-                            >
-                              <Trash2 size={17} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {!compact && <EnvelopeMonthClosing budget={budget} line={l} actions={actions} readOnly={readOnly} />}
-                    {!compact && <BillClosing budget={budget} line={l} actions={actions} readOnly={readOnly} potAvailableCents={potAvailableCents} />}
-                    {!compact && (
-                      <>
-                        <EnvelopeExpenses key={`expenses:${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
-                        <EnvelopePotTransfers key={`transfers:${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
-                      </>
-                    )}
-                    </div>
-                    </details>
-                  </article>
-                );
-              })}
+              .map((line) => <EnvelopeCard key={`${budget.id}:${line.id}`} budget={budget} line={line}
+                actions={actions} readOnly={readOnly} compact={compact} potAvailableCents={potAvailableCents} />)}
           </div>
         </section>
       ))}

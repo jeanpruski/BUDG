@@ -15,8 +15,13 @@ export function Modal({
   const titleId = useId();
   useEffect(() => {
     const dialog = ref.current!;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.showModal();
-    return () => dialog.close();
+    return () => {
+      dialog.close();
+      const remaining = [...document.querySelectorAll<HTMLDialogElement>("dialog:modal")].at(-1);
+      if (opener?.isConnected && (!remaining || remaining.contains(opener))) opener.focus({ preventScroll: true });
+    };
   }, []);
   return (
     <dialog

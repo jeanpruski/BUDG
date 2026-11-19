@@ -4,18 +4,19 @@ import type { Actions } from "./screens";
 import { displayDate } from "./ui";
 import "./pot-transfers.css";
 
-export function EnvelopePotTransfers({ budget, line, actions, readOnly = false }: {
+export function EnvelopePotTransfers({ budget, line, actions, readOnly = false, defaultOpen = false }: {
   budget: Budget;
   line: BudgetLine;
   actions: Actions;
   readOnly?: boolean;
+  defaultOpen?: boolean;
 }) {
   const transfers = budget.potTransfers.filter((entry) => entry.lineId === line.id)
     .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   if (!transfers.length) return null;
   const available = budgetSummary(budget).lines.find((entry) => entry.id === line.id)?.available ?? 0;
   return (
-    <details className="envelope-expenses envelope-pot-transfers">
+    <details className="envelope-expenses envelope-pot-transfers" open={defaultOpen}>
       <summary aria-label={`Transferts du pot · ${line.name} (${transfers.length})`}>
         <span>Transferts du pot</span><span className="envelope-expense-count">{transfers.length}</span>
         <ChevronDown size={16} aria-hidden="true" />
