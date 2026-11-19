@@ -139,7 +139,7 @@ export function Envelopes({
     closed = budget.status === "CLOSED";
   return (
     <>
-      {(["HOUSING", "DAILY_LIFE"] as const).map((group) => (
+      {(["DAILY_LIFE", "HOUSING"] as const).map((group) => (
         <section className="envelope-group" key={group}>
           <div className="group-title">
             <h3>
