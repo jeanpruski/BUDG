@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { Resvg } from "@resvg/resvg-js";
-import { budgetSummary, euro, monthLabel } from "../src/domain";
+import { budgetSummary, euro, monthLabel, keepsReserve } from "../src/domain";
 import { monthlyReserveProvisions } from "../src/reserveProvisions";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 
@@ -45,7 +45,7 @@ export function monthlyReportData(raw: ServerSnapshot) {
       ];
     }),
   ].sort((a, b) => b.date.localeCompare(a.date) || b.order - a.order || a.id.localeCompare(b.id));
-  const reserveLines = summary.lines.filter((line) => line.kind === "RESERVE");
+  const reserveLines = summary.lines.filter((line) => keepsReserve(line));
   const reserveBalanceCents = total(reserveLines.map((line) => line.available));
   const communalReserveCents = Math.min(Math.max(0, reserveBalanceCents), total(reserveLines.map((line) =>
     Math.min(line.reservedPotCents, Math.max(0, line.available)),

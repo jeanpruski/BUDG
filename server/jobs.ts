@@ -29,6 +29,7 @@ const operationSchemas = {
   payment: baseOperation.extend({ memberId: z.string().min(1), note: z.string().max(200) }),
   potExpense: baseOperation.extend({ description: z.string().min(1).max(200), order: z.number().int().positive().safe().optional() }),
   potTransfer: baseOperation.extend({ lineId: z.string().min(1), note: z.string().max(200), order: z.number().int().positive().safe().optional() }),
+  envelopeMonth: z.object({ id: z.string().min(1), date: dateSchema, monthFinished: z.boolean(), carryRemainder: z.boolean() }),
   billClosure: stateSchema.shape.budget.shape.billClosures.element,
 };
 const auditSchema = z.object({
@@ -37,7 +38,7 @@ const auditSchema = z.object({
   actor_user_id: z.string().uuid(),
   actor_email: z.string().min(1),
   actor_display_name: z.string().min(1),
-  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer", "billClosure"]),
+  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer", "billClosure", "envelopeMonth"]),
   entity_id: z.string().min(1),
   entity_month: monthSchema,
   action: z.enum(["added", "updated", "deleted"]),

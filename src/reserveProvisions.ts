@@ -1,8 +1,8 @@
-import type { budgetSummary } from "./domain";
+import { keepsReserve, type budgetSummary } from "./domain";
 
 /** Personal provisions received this month, kept separate from spending and reserve stock. */
 export function monthlyReserveProvisions(summary: ReturnType<typeof budgetSummary>) {
-  const reserves = summary.lines.filter((line) => line.kind === "RESERVE");
+  const reserves = summary.lines.filter((line) => keepsReserve(line));
   const lines = reserves.map((line) => ({
     id: line.id,
     name: line.name,

@@ -43,6 +43,8 @@ const lineSchema = z.object({
   openingShares: z.array(shareSchema).length(2),
   openingPotCents: money.default(0),
   settled: z.boolean(),
+  monthFinished: z.boolean().optional(),
+  carryRemainder: z.boolean().optional(),
   dueDay: z.number().int().min(1).max(31).optional(),
 });
 const expenseSchema = z.object({
@@ -107,7 +109,7 @@ const budgetSchema = z.object({
   closedAt: z.string().optional(),
 });
 export const stateSchema = z.object({
-  version: z.literal(7),
+  version: z.literal(8),
   revision: z.number().int().nonnegative(),
   potSequence: z.number().int().nonnegative().safe(),
   configured: z.boolean(),
@@ -134,6 +136,14 @@ export type AppState = z.infer<typeof stateSchema>;
 export type AllocationType = BudgetLine["allocationType"];
 export type ExpenseGroup = BudgetLine["expenseGroup"];
 export type LineKind = BudgetLine["kind"];
+export const keepsReserve = (line: Pick<BudgetLine, "kind" | "carryRemainder">) =>
+  line.kind === "RESERVE" || !!line.carryRemainder;
+export function envelopeFullyFunded(line: ReturnType<typeof budgetSummary>["lines"][number]) {
+  return line.funded >= Math.max(line.capacity, line.spent) && line.fundedShares.every((share) =>
+    share.amountCents >= (line.shares.find((planned) => planned.memberId === share.memberId)?.amountCents ?? 0));
+}
+export const envelopeMonthFinished = (line: ReturnType<typeof budgetSummary>["lines"][number]) =>
+  !!line.monthFinished && envelopeFullyFunded(line);
 
 export const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(
@@ -330,9 +340,9 @@ export function budgetSummary(budget: Budget) {
     const potSpentCents = Math.min(potFunding, Math.max(0, spent - personalCapacityCents));
     const costs = splitAmount(spent - potSpentCents, weights, ids);
     const reservedShares = capacityShares.map((n, i) =>
-      line.kind === "RESERVE" ? Math.max(0, n - costs[i]) : 0,
+      keepsReserve(line) ? Math.max(0, n - costs[i]) : 0,
     );
-    const reservedPotCents = line.kind === "RESERVE" ? potFunding - potSpentCents : 0;
+    const reservedPotCents = keepsReserve(line) ? potFunding - potSpentCents : 0;
     const funded = opening + potAddedCents + sum(ids.map((id) => funding[id][index]));
     const releasedToPotCents = billClosure?.amountCents ?? 0;
     return {
@@ -413,7 +423,7 @@ export function budgetSummary(budget: Budget) {
     sum([...billClosures.values()].map((closure) => closure.amountCents));
   const reservedCents = sum(lines.flatMap((l) => l.reservedShares)) + sum(lines.map((line) => line.reservedPotCents));
   const unpaidBills = lines.filter(
-    (l) => l.kind === "FIXED" && l.capacity > 0 && !l.settled,
+    (l) => l.kind === "FIXED" && !keepsReserve(l) && l.capacity > 0 && !l.settled,
   );
   return {
     expected,
@@ -499,6 +509,8 @@ export function nextPotOrder(state: AppState) {
   return next;
 }
 function migrateState(raw: unknown): unknown {
+  if (raw && typeof raw === "object" && "version" in raw && raw.version === 7)
+    return { ...raw, version: 8 };
   if (raw && typeof raw === "object" && "version" in raw && raw.version === 6) {
     const legacyTransfer = potTransferSchema.omit({ order: true });
     const legacyBudget = budgetSchema.omit({ billClosures: true, closedOrder: true }).extend({ potTransfers: z.array(legacyTransfer).default([]) });
@@ -523,7 +535,7 @@ function migrateState(raw: unknown): unknown {
       }
       for (const expense of expenses.filter((entry) => entry.date.slice(0, 7) === month).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) expense.order = ++sequence;
     }
-    return { ...legacy, version: 7, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
+    return { ...legacy, version: 8, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
   }
   if (
     !raw ||
@@ -599,6 +611,10 @@ export function validateState(raw: unknown): AppState {
       if (new Set(entries.map((e) => e.id)).size !== entries.length)
         throw new Error("Identifiants dupliqués.");
     for (const l of b.lines) {
+      if (l.carryRemainder && l.kind !== "FIXED")
+        throw new Error("Seule une facture peut utiliser le report ponctuel.");
+      if (l.monthFinished && !keepsReserve(l))
+        throw new Error("Seule une réserve ou une facture à reporter peut être terminée pour le mois.");
       const closure = b.billClosures.find((entry) => entry.lineId === l.id && !entry.reopened);
       if (l.amountPlan && l.plannedCents !== amountForMonth(l, b.id))
         throw new Error("Le montant de l’enveloppe ne correspond pas à sa programmation pour ce mois.");
@@ -626,7 +642,7 @@ export function validateState(raw: unknown): AppState {
         throw new Error(
           "Les parts ne correspondent pas à la règle de répartition.",
         );
-      if (l.kind !== "RESERVE" && (l.openingShares.some((x) => x.amountCents) || l.openingPotCents > 0))
+      if (!keepsReserve(l) && (l.openingShares.some((x) => x.amountCents) || l.openingPotCents > 0))
         throw new Error("Report réservé à une enveloppe de réserve.");
     }
     const activeClosures = b.billClosures.filter((closure) => !closure.reopened);
@@ -645,7 +661,7 @@ export function validateState(raw: unknown): AppState {
           closure.fundingShares.some((share) => share.amountCents < owned(closure.plannedShares, share.memberId)))
         throw new Error("La facture doit être entièrement financée avant sa clôture.");
       if (!closure.reopened) {
-        if (line.kind !== "FIXED" || !line.settled || line.plannedCents !== closure.plannedCents ||
+        if (line.kind !== "FIXED" || keepsReserve(line) || !line.settled || line.plannedCents !== closure.plannedCents ||
             line.shares.some((share) => share.amountCents !== owned(closure.plannedShares, share.memberId)))
           throw new Error("La provision et les parts d’une facture clôturée sont figées. Rouvrez-la pour les modifier.");
         const transfers = b.potTransfers.filter((transfer) => transfer.lineId === line.id);

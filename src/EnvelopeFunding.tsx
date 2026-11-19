@@ -1,4 +1,4 @@
-import { budgetSummary, euro } from "./domain";
+import { budgetSummary, euro, keepsReserve } from "./domain";
 import "./pot-transfers.css";
 
 export function EnvelopeFunding({ line }: {
@@ -8,7 +8,7 @@ export function EnvelopeFunding({ line }: {
     <div className="envelope-funding">
       <dl>
         <div><dt>Provision du mois</dt><dd>{euro(line.plannedCents)}</dd></div>
-        {line.kind === "RESERVE" && <div><dt>Réserve reportée</dt><dd>{euro(line.opening)}</dd></div>}
+        {keepsReserve(line) && <div><dt>Réserve reportée</dt><dd>{euro(line.opening)}</dd></div>}
         {line.potAddedCents > 0 && <div><dt>Depuis le pot ce mois</dt><dd>{euro(line.potAddedCents)}</dd></div>}
         <div><dt>Dépensé</dt><dd>{euro(line.spent)}</dd></div>
       </dl>

@@ -51,6 +51,8 @@ import {
 } from "./domain";
 import {
   closeMonth,
+  finishEnvelopeMonth,
+  reopenEnvelopeMonth,
   closeBill,
   reopenBill,
   configureHousehold,
@@ -308,6 +310,16 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
         (s) => setSettled(s, id, settled),
       ),
     close: () => open({ type: "close" }),
+    finishEnvelopeMonth: (lineId) => confirm(
+      "Terminer cette enveloppe pour ce mois ?",
+      "Le solde restera dans cette enveloppe, sans dépense ni transfert vers le pot commun. Il sera reporté tant qu’il n’est pas dépensé. Le mois suivant demandera la totalité de sa nouvelle provision, en plus du report. Un paiement réel rouvrira automatiquement le suivi du mois.",
+      (s) => finishEnvelopeMonth(s, lineId),
+    ),
+    reopenEnvelopeMonth: (lineId) => confirm(
+      "Rouvrir le suivi de cette enveloppe ?",
+      "Le suivi du mois sera de nouveau ouvert. Aucun paiement ni virement n’est créé. Les réserves provenant des mois précédents restent conservées.",
+      (s) => reopenEnvelopeMonth(s, lineId),
+    ),
     closeBill: (lineId) => open({ type: "billClose", lineId }),
     reopenBill: (lineId) => open({ type: "billReopen", lineId }),
     next: () => open({ type: "monthlyIncome", mode: "open" }),

@@ -232,7 +232,7 @@ describe("réouverture et intégrité du journal", () => {
     for (const budget of [raw.budget, ...raw.archivedBudgets]) { delete budget.billClosures; delete budget.closedOrder; for (const transfer of budget.potTransfers) delete transfer.order; }
     for (const expense of raw.potExpenses) delete expense.order;
     const migrated = validateState(raw);
-    expect(migrated.version).toBe(7);
+    expect(migrated.version).toBe(8);
     expect(migrated.budget.billClosures).toEqual([]);
     expect(migrated.budget.lines[0].settled).toBe(true);
     expect(migrated.budget.closedPotCents).toBe(state.budget.closedPotCents);

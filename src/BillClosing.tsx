@@ -1,5 +1,5 @@
 import { CheckCircle2, LockKeyhole } from "lucide-react";
-import { Budget, budgetSummary, euro } from "./domain";
+import { Budget, budgetSummary, euro, keepsReserve } from "./domain";
 import type { Actions } from "./screens";
 import { Form } from "./ui";
 import "./bill-closing.css";
@@ -16,7 +16,7 @@ export function BillClosing({ budget, line, actions, readOnly = false, potAvaila
   readOnly?: boolean;
   potAvailableCents: number;
 }) {
-  if (line.kind !== "FIXED") return null;
+  if (line.kind !== "FIXED" || keepsReserve(line)) return null;
   const closure = activeBillClosure(budget, line.id);
   if (!closure && line.capacity === 0 && line.spent === 0) return null;
   const editable = !readOnly && budget.status === "ACTIVE";

@@ -3,6 +3,7 @@ import { MobileDetails } from "./MobileDetails";
 import { EnvelopeExpenses } from "./EnvelopeExpenses";
 import { EnvelopeFunding } from "./EnvelopeFunding";
 import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
+import { EnvelopeMonthClosing } from "./EnvelopeMonthClosing";
 import { BillClosing, activeBillClosure } from "./BillClosing";
 import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
@@ -32,6 +33,8 @@ import {
   potSummary,
   accountBalance,
   budgetSummary,
+  keepsReserve,
+  envelopeMonthFinished,
   euro,
   today,
 } from "./domain";
@@ -51,6 +54,8 @@ export type Actions = {
   removePotExpense: (id: string) => void;
   potTransfer?: (lineId?: string) => void;
   removePotTransfer?: (id: string) => void;
+  finishEnvelopeMonth?: (lineId: string) => void;
+  reopenEnvelopeMonth?: (lineId: string) => void;
   closeBill?: (lineId: string) => void;
   reopenBill?: (lineId: string) => void;
 };
@@ -160,11 +165,11 @@ export function Envelopes({
           <div className="envelopes">
             {summary.lines
               .filter((l) => l.expenseGroup === group)
-              .sort((a, b) => Number(!!a.billClosure) - Number(!!b.billClosure))
+              .sort((a, b) => Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)))
               .map((l) => {
                 const billClosure = activeBillClosure(budget, l.id);
                 const late =
-                  l.kind === "FIXED" &&
+                  l.kind === "FIXED" && !keepsReserve(l) &&
                   l.capacity > 0 &&
                   !l.settled &&
                   l.dueDay &&
@@ -172,7 +177,7 @@ export function Envelopes({
                     today();
                 return (
                   <article
-                    className={`panel envelope envelope-${l.kind.toLowerCase()}${billClosure ? " envelope-closed" : ""}`}
+                    className={`panel envelope envelope-${l.kind.toLowerCase()}${billClosure || envelopeMonthFinished(l) ? " envelope-closed" : ""}`}
                     key={l.id}
                   >
                     <div className="section-head">
@@ -189,10 +194,10 @@ export function Envelopes({
                         <h3>{l.name}</h3>
                       </div>
                       <span
-                        className={`badge ${l.kind === "RESERVE" ? "blue" : l.settled ? "green" : late ? "amber" : ""}`}
+                        className={`badge ${envelopeMonthFinished(l) ? "green" : keepsReserve(l) ? "blue" : l.settled ? "green" : late ? "amber" : ""}`}
                       >
-                        {l.kind === "RESERVE"
-                          ? "Réserve"
+                        {envelopeMonthFinished(l) ? "Terminé pour ce mois" : keepsReserve(l)
+                          ? l.kind === "FIXED" ? "Report conservé" : "Réserve"
                           : l.kind === "VARIABLE"
                             ? "À consommer"
                             : billClosure
@@ -270,7 +275,7 @@ export function Envelopes({
                     {l.amountPlan && (l.amountPlan.changes.some((entry) => entry.fromMonth > budget.id) || l.amountPlan.exceptions.some((entry) => entry.month >= budget.id)) && (
                       <p className="hint">Des montants spécifiques sont programmés par mois.</p>
                     )}
-                    {l.kind === "RESERVE" && (
+                    {keepsReserve(l) && (
                       <p className="hint">
                         Le solde est conservé le mois suivant et exclu des
                         surplus du pot commun.
@@ -331,6 +336,7 @@ export function Envelopes({
                       </div>
                     )}
                     </MobileDetails>
+                    {!compact && <EnvelopeMonthClosing budget={budget} line={l} actions={actions} readOnly={readOnly} />}
                     {!compact && <BillClosing budget={budget} line={l} actions={actions} readOnly={readOnly} potAvailableCents={potAvailableCents} />}
                     {!compact && (
                       <>

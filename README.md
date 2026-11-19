@@ -75,6 +75,14 @@ Exemple avec des salaires de 3 000 € et 2 000 € : appartement prévu 1 000 �
 
 Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêter de l’alimenter, mettez sa contribution mensuelle à zéro. Cette version ne propose pas encore de libération manuelle d’une réserve vers le pot commun.
 
+## Terminer une enveloppe pour le mois
+
+**Terminer pour ce mois** marque une réserve comme terminée sans créer de dépense ni débiter le compte. Le solde reste dans la même enveloppe. La provision du mois doit être entièrement reçue. Une enveloppe terminée passe en vert et en fin de groupe ; le lecteur voit son statut, seuls les éditeurs peuvent terminer ou rouvrir le suivi. Un nouveau paiement réel rouvre automatiquement le suivi du mois.
+
+Pour une facture différée, ce bouton active un report conservé dans l’enveloppe au lieu de libérer son surplus au pot. Le report reste protégé jusqu’à sa consommation, sans changer le type habituel ni la programmation de la facture. Une facture retrouve son fonctionnement habituel au début du mois suivant l’épuisement de ce report. La clôture habituelle d’une facture reste une action distincte qui libère son surplus au pot.
+
+Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V8 reprend les budgets V3 à V7 sans inventer de dépense ou de report ; un ancien client ne peut écraser un budget V8.
+
 ## Clôture et historique
 
 La clôture exige que les contributions et éventuels compléments soient reçus, et que toutes les factures prévues soient confirmées. Elle fige les dépenses, les répartitions et le montant affecté au pot commun. Relancer une clôture n’ajoute jamais le surplus deux fois. Les dépenses du pot sont enregistrées séparément.

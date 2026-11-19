@@ -21,6 +21,8 @@ import {
   sharesFor,
   today,
   validateState,
+  keepsReserve,
+  envelopeFullyFunded,
 } from "./domain";
 export type { AppState } from "./domain";
 export const uid = () => crypto.randomUUID();
@@ -42,7 +44,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 7,
+    version: 8,
     revision: 0,
     potSequence: 0,
     configured: false,
@@ -167,7 +169,7 @@ export function saveLine(
     );
   if (
     old && (old.openingShares.some((x) => x.amountCents > 0) || old.openingPotCents > 0) &&
-    (line.kind !== "RESERVE" || line.expenseGroup !== old.expenseGroup)
+    ((line.kind !== old.kind && line.kind !== "RESERVE") || line.expenseGroup !== old.expenseGroup)
   )
     throw new Error(
       "Cette enveloppe contient une réserve reportée : conservez son type et sa répartition.",
@@ -206,6 +208,8 @@ export function saveLine(
     openingShares: old?.openingShares ?? zeroShares(s.members),
     openingPotCents: old?.openingPotCents ?? 0,
     settled: old?.settled ?? false,
+    monthFinished: month > s.budget.id ? old?.monthFinished : old?.monthFinished ? false : undefined,
+    carryRemainder: line.kind === "FIXED" ? old?.carryRemainder : undefined,
   };
   return withBudget(s, {
     ...s.budget,
@@ -292,11 +296,12 @@ export function saveExpense(s: AppState, expense: Expense, settled: boolean) {
       : [...s.budget.expenses, expense],
     lines: s.budget.lines.map((l) =>
       l.id === expense.lineId && l.kind === "FIXED"
-        ? { ...l, settled }
+        ? { ...l, settled, monthFinished: l.monthFinished ? false : undefined }
+        : l.id === expense.lineId && l.monthFinished ? { ...l, monthFinished: false }
         : previous &&
             previous.lineId !== expense.lineId &&
             l.id === previous.lineId
-          ? { ...l, settled: false }
+          ? { ...l, settled: false, monthFinished: l.monthFinished ? false : undefined }
           : l,
     ),
   });
@@ -309,7 +314,7 @@ export function removeExpense(s: AppState, id: string) {
     ...s.budget,
     expenses: s.budget.expenses.filter((e) => e.id !== id),
     lines: s.budget.lines.map((l) =>
-      l.id === lineId ? { ...l, settled: false } : l,
+      l.id === lineId ? { ...l, settled: false, monthFinished: l.monthFinished ? false : undefined } : l,
     ),
   });
 }
@@ -415,6 +420,7 @@ export function closeBill(s: AppState, lineId: string) {
   const line = budgetSummary(s.budget).lines.find((entry) => entry.id === lineId);
   if (!line || line.kind !== "FIXED") throw new Error("Seule une facture du mois en cours peut être clôturée.");
   if (line.billClosure) return s;
+  if (keepsReserve(line)) throw new Error("Cette facture conserve son argent dans l’enveloppe. Utilisez Terminer pour ce mois.");
   if (line.funded < Math.max(line.capacity, line.spent) || line.available < 0 ||
       line.fundedShares.some((share) => share.amountCents < (line.shares.find((entry) => entry.memberId === share.memberId)?.amountCents ?? 0)))
     throw new Error("Financez entièrement cette facture et son éventuel dépassement avant de la clôturer.");
@@ -451,6 +457,27 @@ export function closeMonth(s: AppState) {
   if (s.budget.status === "CLOSED") return s;
   return withBudget(s, closeBudget(s.budget, nextPotOrder(s)));
 }
+export function finishEnvelopeMonth(s: AppState, lineId: string) {
+  active(s);
+  editableLine(s, lineId);
+  const line = budgetSummary(s.budget).lines.find((entry) => entry.id === lineId);
+  if (!line || !["FIXED", "RESERVE"].includes(line.kind))
+    throw new Error("Choisissez une réserve ou une facture à reporter.");
+  if (!envelopeFullyFunded(line))
+    throw new Error("Financez entièrement la provision de ce mois avant de terminer cette enveloppe.");
+  return withBudget(s, { ...s.budget, lines: s.budget.lines.map((entry) => entry.id === lineId ? {
+    ...entry, monthFinished: true, carryRemainder: entry.kind === "FIXED" ? true : undefined,
+  } : entry) });
+}
+export function reopenEnvelopeMonth(s: AppState, lineId: string) {
+  active(s);
+  editableLine(s, lineId);
+  const line = s.budget.lines.find((entry) => entry.id === lineId);
+  if (!line?.monthFinished) throw new Error("Cette enveloppe n’est pas terminée pour ce mois.");
+  return withBudget(s, { ...s.budget, lines: s.budget.lines.map((entry) => entry.id === lineId ? {
+    ...entry, monthFinished: false,
+  } : entry) });
+}
 export function startNextMonth(s: AppState) {
   if (s.budget.status !== "CLOSED")
     throw new Error("Clôturez le mois en cours avant de préparer le suivant.");
@@ -469,6 +496,10 @@ export function startNextMonth(s: AppState) {
         ...l,
         plannedCents: amountForMonth(l, month),
         settled: false,
+        monthFinished: l.monthFinished === undefined ? undefined : false,
+        carryRemainder: l.kind === "FIXED" && l.carryRemainder ?
+          summary.lines.find((entry) => entry.id === l.id)!.reservedShares.some((amount) => amount > 0) ||
+          summary.lines.find((entry) => entry.id === l.id)!.reservedPotCents > 0 : undefined,
         shares: sharesFor(
           amountForMonth(l, month),
           l.allocationType,

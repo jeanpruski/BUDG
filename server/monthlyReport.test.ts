@@ -207,7 +207,7 @@ describe("comptes rendus mensuels par email", () => {
     const before = JSON.stringify(legacy);
     const report = await renderMonthlyReport(legacy, "monthly");
     const state = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
-    expect(state.version).toBe(7);
+    expect(state.version).toBe(8);
     expect(state.budget.potTransfers).toEqual([]);
     expect(state.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(monthlyReportData(legacy).potBalanceCents).toBe(47655);
