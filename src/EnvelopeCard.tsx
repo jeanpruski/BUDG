@@ -10,9 +10,9 @@ export function envelopePresentation(line: EnvelopeLine, budget: Budget) {
   const late = line.kind === "FIXED" && !keepsReserve(line) && line.capacity > 0 && !line.settled && line.dueDay &&
     `${budget.id}-${String(Math.min(line.dueDay, new Date(Number(budget.id.slice(0, 4)), Number(budget.id.slice(5)), 0).getDate())).padStart(2, "0")}` < today();
   const finished = !!line.billClosure || envelopeMonthFinished(line);
-  const label = envelopeMonthFinished(line) ? "Terminé pour ce mois" : keepsReserve(line)
+  const label = finished ? "Clôturé" : keepsReserve(line)
     ? line.kind === "FIXED" ? "Report conservé" : "Réserve"
-    : line.kind === "VARIABLE" ? "À consommer" : line.billClosure ? "Facture clôturée"
+    : line.kind === "VARIABLE" ? "À consommer"
     : line.settled ? "Facture réglée" : line.capacity === 0 ? "Rien à financer ce mois" : late ? "Échéance dépassée" : "Facture à régler";
   const tone = finished ? "green" : keepsReserve(line) ? "blue" : line.settled ? "green" : late ? "amber" : "";
   const Icon = keepsReserve(line) ? Sprout : line.kind === "FIXED" ? ReceiptText : ShoppingBag;

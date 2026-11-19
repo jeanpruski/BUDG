@@ -41,7 +41,7 @@ describe("clôture individuelle dans l’interface", () => {
     const state = closeBill(fixture(), "electricite");
     const line = budgetSummary(state.budget).lines[0];
     const panel = renderToStaticMarkup(<BillClosing budget={state.budget} line={line} actions={actions} readOnly potAvailableCents={2000} />);
-    expect(panel).toContain("Facture clôturée");
+    expect(panel).toContain("Clôturé");
     expect(panel).not.toContain("<button");
     const payments = renderToStaticMarkup(<EnvelopeExpenses budget={state.budget} line={line} actions={actions} />);
     expect(payments).toContain("Facture payée");

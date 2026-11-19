@@ -12,7 +12,7 @@ export function EnvelopeMonthClosing({ budget, line, actions, readOnly = false }
   if (!finished && !editable) return null;
   return <div className="bill-closing">
     {finished ? <>
-      <p className="bill-closed-status"><CheckCircle2 size={16} aria-hidden="true" />Terminé pour ce mois</p>
+      <p className="bill-closed-status"><CheckCircle2 size={16} aria-hidden="true" />Clôturé</p>
       <p>{euro(Math.max(0, line.available))} conservés dans cette enveloppe. La prochaine provision reste due en totalité.</p>
       {editable && actions.reopenEnvelopeMonth && <button type="button" className="text-button"
         onClick={() => actions.reopenEnvelopeMonth?.(line.id)} aria-label={`Rouvrir le suivi du mois · ${line.name}`}>Rouvrir le suivi du mois</button>}

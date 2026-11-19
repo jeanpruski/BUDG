@@ -120,7 +120,7 @@ describe("suivi mensuel des réserves et reports de facture", () => {
     s = saveLine(s, { id: "other", name: "Autre réserve", plannedCents: 0, expenseGroup: "HOUSING", kind: "RESERVE" });
     const actions = { finishEnvelopeMonth: vi.fn(), reopenEnvelopeMonth: vi.fn() } as unknown as Actions;
     const html = renderToStaticMarkup(<EnvelopeMonthClosing budget={s.budget} line={line(s)} actions={actions} readOnly />);
-    expect(html).toContain("Terminé pour ce mois");
+    expect(html).toContain("Clôturé");
     expect(html).not.toContain("<button");
     const all = renderToStaticMarkup(<Envelopes budget={s.budget} actions={actions} readOnly />);
     expect(all.indexOf("Autre réserve")).toBeLessThan(all.indexOf("Prêt immobilier"));
