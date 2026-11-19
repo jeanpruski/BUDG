@@ -63,7 +63,7 @@
   }
   .budget-toolbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
     gap: 8px;
     width: 100%;
     margin: 0 0 12px;

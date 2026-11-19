@@ -396,15 +396,15 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   };
   const budgetActions = !readOnly && view === "budget" && state.configured && b.status === "ACTIVE" ? (
     <div className="budget-actions budget-toolbar">
+      <button className="secondary" disabled={busy} onClick={() => actions.line()}>
+        <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
+      </button>
       <button
         className="primary"
         disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
         onClick={() => actions.expense()}
       >
         <Plus size={17} aria-hidden="true" /> Une dépense
-      </button>
-      <button className="secondary" disabled={busy} onClick={() => actions.line()}>
-        <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
       </button>
     </div>
   ) : null;
