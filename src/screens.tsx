@@ -1,5 +1,5 @@
 import { HeroArt } from "./visuals";
-import { MobileDetails } from "./MobileDetails";
+import "./envelope-disclosure.css";
 import { EnvelopeExpenses } from "./EnvelopeExpenses";
 import { EnvelopeFunding } from "./EnvelopeFunding";
 import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
@@ -8,6 +8,7 @@ import { BillClosing, activeBillClosure } from "./BillClosing";
 import { HistoryJournal } from "./HistoryJournal";
 import { useState } from "react";
 import {
+  ChevronDown,
   ArrowDownLeft,
   Wallet,
   ShoppingBag,
@@ -178,8 +179,10 @@ export function Envelopes({
                 return (
                   <article
                     className={`panel envelope envelope-${l.kind.toLowerCase()}${billClosure || envelopeMonthFinished(l) ? " envelope-closed" : ""}`}
-                    key={l.id}
+                    key={`${budget.id}:${l.id}`}
                   >
+                    <details className="envelope-disclosure">
+                    <summary className="envelope-summary" aria-label={`Détails de l’enveloppe · ${l.name}`}>
                     <div className="section-head">
                       <div className="envelope-title">
                         <span className="envelope-symbol">
@@ -211,16 +214,6 @@ export function Envelopes({
                                 : "Facture à régler"}
                       </span>
                     </div>
-                    <p className="hint envelope-allocation">
-                      {allocationLabel(l)}
-                      {l.allocationType === "CUSTOM" &&
-                        l.customPercentages
-                          ?.map(
-                            (p) =>
-                              ` · ${budget.members.find((m) => m.id === p.memberId)?.name} ${p.percent} %`,
-                          )
-                          .join("")}
-                    </p>
                     <div className="envelope-amount">
                       <strong className={l.available < 0 ? "text-red" : ""}>
                         {euro(l.available)}
@@ -236,8 +229,24 @@ export function Envelopes({
                       value={Math.min(l.spent, l.capacity || 1)}
                       max={l.capacity || 1}
                     />
+                    <div className="envelope-usage">
+                      <span>{euro(l.spent)} payés</span>
+                      <span>Budget {euro(l.capacity)}</span>
+                    </div>
+                    <span className="envelope-disclosure-hint"><span className="envelope-show-label">Voir les détails</span><span className="envelope-hide-label">Masquer les détails</span><ChevronDown size={16} aria-hidden="true" /></span>
+                    </summary>
+                    <div className="envelope-details">
+                    <p className="hint envelope-allocation">
+                      {allocationLabel(l)}
+                      {l.allocationType === "CUSTOM" &&
+                        l.customPercentages
+                          ?.map(
+                            (p) =>
+                              ` · ${budget.members.find((m) => m.id === p.memberId)?.name} ${p.percent} %`,
+                          )
+                          .join("")}
+                    </p>
                     <EnvelopeFunding line={l} />
-                    <MobileDetails label={readOnly || closed || billClosure ? "Détails" : "Détails et actions"} name={l.name}>
                     <dl className="line-numbers">
                       <div className="envelope-planned-row">
                         <dt>Prévu ce mois</dt>
@@ -335,7 +344,6 @@ export function Envelopes({
                         )}
                       </div>
                     )}
-                    </MobileDetails>
                     {!compact && <EnvelopeMonthClosing budget={budget} line={l} actions={actions} readOnly={readOnly} />}
                     {!compact && <BillClosing budget={budget} line={l} actions={actions} readOnly={readOnly} potAvailableCents={potAvailableCents} />}
                     {!compact && (
@@ -344,6 +352,8 @@ export function Envelopes({
                         <EnvelopePotTransfers key={`transfers:${budget.id}:${l.id}`} budget={budget} line={l} actions={actions} readOnly={readOnly} />
                       </>
                     )}
+                    </div>
+                    </details>
                   </article>
                 );
               })}
