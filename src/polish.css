@@ -2253,3 +2253,9 @@ dialog::backdrop {
   background: #eaf1e9;
   border-color: #8eaa95;
 }
+
+@media (min-width: 1600px) {
+  .envelopes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
