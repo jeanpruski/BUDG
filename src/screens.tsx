@@ -122,6 +122,17 @@ export function Members({
     </div>
   );
 }
+const envelopeOrder = {
+  DAILY_LIFE: ["courses", "sorties a deux", "securite", "vacances", "carte commune"],
+  HOUSING: ["pret", "taxe fonciere", "charges de copro", "assurance habitation", "assurance caae", "naoassur", "box internet", "electricite"],
+};
+function envelopeDisplayOrder(line: BudgetLine) {
+  const name = line.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const order = envelopeOrder[line.expenseGroup];
+  const index = order.findIndex(prefix => name.startsWith(prefix));
+  return index < 0 ? order.length : index;
+}
+
 export function Envelopes({
   budget,
   actions,
@@ -159,7 +170,9 @@ export function Envelopes({
           <div className="envelopes">
             {summary.lines
               .filter((l) => l.expenseGroup === group)
-              .sort((a, b) => Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)))
+              .sort((a, b) =>
+                Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)) ||
+                envelopeDisplayOrder(a) - envelopeDisplayOrder(b))
               .map((line) => <EnvelopeCard key={`${budget.id}:${line.id}`} budget={budget} line={line}
                 actions={actions} readOnly={readOnly} compact={compact} potAvailableCents={potAvailableCents} />)}
           </div>
