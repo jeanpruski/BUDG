@@ -115,8 +115,8 @@ type Dialog =
       intent?: "restore";
     };
 const navigation = [
-  ["dashboard", "Vue d’ensemble", Home],
   ["budget", "Enveloppes", WalletCards],
+  ["dashboard", "Vue d’ensemble", Home],
   ["payments", "Versements", Users],
   ["pot", "Pot commun", ArrowRight],
   ["history", "Historique", HistoryIcon],
@@ -150,7 +150,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   const [state, setState] = useState<AppState | null>(null);
   const current = useRef<AppState | null>(null),
     locked = useRef(false);
-  const [view, setView] = useState<View>("dashboard"),
+  const [view, setView] = useState<View>("budget"),
     [dialog, setDialog] = useState<Dialog | null>(null);
   const [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -238,7 +238,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       current.current = next;
       setState(next);
       if (!next.configured) {
-        setView("dashboard");
+        setView("budget");
         setBackups([]);
       }
       setNotice(message);
@@ -416,7 +416,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
   return (
     <div className="app-shell">
       <MobileMenu
-        home={() => go("dashboard")}
+        home={() => go("budget")}
         footer={user && logout ? <SessionControls user={user} signOut={logout} /> : undefined}
       >
         {(close) =>
@@ -442,7 +442,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            go("dashboard");
+            go("budget");
           }}
         >
           <span className="brand-symbol">
@@ -968,7 +968,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             }
             finish={() => {
               setDialog(null);
-              go("dashboard");
+              go("budget");
             }}
             custom={() => {
               setDialog(null);
@@ -999,7 +999,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                       ? "Salaires du prochain mois enregistrés."
                       : "Salaires confirmés et nouveau mois préparé.",
                 ).then((ok) => {
-                  if (ok && dialog.mode === "open") setView("dashboard");
+                  if (ok && dialog.mode === "open") setView("budget");
                 });
               })
             }
