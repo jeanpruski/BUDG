@@ -2230,3 +2230,30 @@ dialog::backdrop {
     animation: none;
   }
 }
+
+.budget-heading {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.budget-heading > div:first-child {
+  flex: 1;
+  min-width: 220px;
+}
+.budget-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.budget-actions > button {
+  min-height: 42px;
+}
+.budget-actions > .secondary {
+  background: transparent;
+  border-color: #b5c7ba;
+  color: #315640;
+}
+.budget-actions > .secondary:not(:disabled):hover {
+  background: #eaf1e9;
+  border-color: #8eaa95;
+}

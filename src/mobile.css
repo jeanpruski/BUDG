@@ -65,7 +65,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .budget-heading > div {
+  .budget-heading > div:first-child {
     display: contents;
   }
   .budget-heading h2 {
@@ -73,9 +73,17 @@
     grid-row: 1;
     align-self: center;
   }
-  .budget-heading > button {
-    grid-column: 2;
-    grid-row: 1;
+  .budget-heading .budget-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-column: 1 / -1;
+    gap: 8px;
+    width: 100%;
+  }
+  .budget-actions > button {
+    min-width: 0;
+    padding: 10px 8px;
+    font-size: 11px;
   }
   .budget-heading p {
     grid-column: 1 / -1;

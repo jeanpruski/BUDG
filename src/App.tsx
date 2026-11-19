@@ -10,7 +10,7 @@ import { PotTransferForm } from "./PotTransferForm";
 import { BillCloseForm, BillReopenForm, activeBillClosure } from "./BillClosing";
 import { TrackingStartForm, TrackingStartPanel } from "./TrackingStart";
 import { startTrackingAtMonth } from "./budgetStart";
-import { BudgetGuide, EnvelopeCoach } from "./guide";
+import { EnvelopeCoach } from "./guide";
 import { HeroArt, LoadingScreen, Spinner, Toast } from "./visuals";
 import {
   HouseholdForm,
@@ -471,16 +471,6 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                 {busy ? "Enregistrement…" : "En local"}
               </span>
             )}
-            {!readOnly && view === "budget" && b.status === "ACTIVE" && state.configured && (
-              <button
-                className="primary"
-                disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
-                onClick={() => actions.expense()}
-              >
-                <Plus size={17} />
-                Une dépense
-              </button>
-            )}
           </div>
         </header>
         {readOnly && <p className="remote-viewer-notice">Lecture seule · Les changements du budget sont actualisés automatiquement.</p>}
@@ -582,15 +572,6 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           ) : (
             <>
               {view === "budget" && <TrackingStartPanel state={state} readOnly={readOnly} open={() => open({ type: "trackingStart" })} />}
-              {view === "budget" && b.status === "ACTIVE" && (
-                <BudgetGuide
-                  state={state}
-                  actions={actions}
-                  readOnly={readOnly}
-                  prepare={() => open({ type: "coach" })}
-                  payments={() => go("payments")}
-                />
-              )}
               {view === "dashboard" && <Dashboard state={state} />}
               {view === "budget" && (
                 <>
@@ -604,13 +585,18 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                       </p>
                     </div>
                     {!readOnly && b.status === "ACTIVE" && (
-                      <button
-                        className="primary"
-                        onClick={() => actions.line()}
-                      >
-                        <Plus size={17} />
-                        Nouvelle enveloppe
-                      </button>
+                      <div className="budget-actions">
+                        <button
+                          className="primary"
+                          disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
+                          onClick={() => actions.expense()}
+                        >
+                          <Plus size={17} aria-hidden="true" /> Une dépense
+                        </button>
+                        <button className="secondary" disabled={busy} onClick={() => actions.line()}>
+                          <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
+                        </button>
+                      </div>
                     )}
                   </div>
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} />
