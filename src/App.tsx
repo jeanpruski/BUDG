@@ -138,6 +138,15 @@ export default function App() {
 }
 function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void }) {
   const readOnly = user?.role === "viewer";
+  const [desktopLayout, setDesktopLayout] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(min-width: 761px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 761px)");
+    const update = () => setDesktopLayout(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const [state, setState] = useState<AppState | null>(null);
   const current = useRef<AppState | null>(null),
     locked = useRef(false);
@@ -385,6 +394,20 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       setError("");
     }
   };
+  const budgetActions = !readOnly && view === "budget" && state.configured && b.status === "ACTIVE" ? (
+    <div className="budget-actions budget-toolbar">
+      <button
+        className="primary"
+        disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
+        onClick={() => actions.expense()}
+      >
+        <Plus size={17} aria-hidden="true" /> Une dépense
+      </button>
+      <button className="secondary" disabled={busy} onClick={() => actions.line()}>
+        <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
+      </button>
+    </div>
+  ) : null;
   const activeDialogError = error ? (
     <p className="alert error" role="alert">
       {error}
@@ -465,6 +488,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             <h1>{navigation.find((n) => n[0] === view)?.[1]}</h1>
           </div>
           <div className="header-actions">
+            {desktopLayout && budgetActions}
             {!(user && logout) && (
               <span className="saved">
                 {busy ? <Spinner small /> : <CheckCircle2 size={15} />}
@@ -575,20 +599,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               {view === "dashboard" && <Dashboard state={state} />}
               {view === "budget" && (
                 <>
-                  {!readOnly && b.status === "ACTIVE" && (
-                    <div className="budget-actions budget-toolbar">
-                      <button
-                        className="primary"
-                        disabled={busy || !b.lines.some((line) => !activeBillClosure(b, line.id))}
-                        onClick={() => actions.expense()}
-                      >
-                        <Plus size={17} aria-hidden="true" /> Une dépense
-                      </button>
-                      <button className="secondary" disabled={busy} onClick={() => actions.line()}>
-                        <WalletCards size={17} aria-hidden="true" /> Nouvelle enveloppe
-                      </button>
-                    </div>
-                  )}
+                  {!desktopLayout && budgetActions}
                   <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} />
                   <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>

@@ -2259,3 +2259,7 @@ dialog::backdrop {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.header-actions .budget-toolbar {
+  margin: 0;
+}
