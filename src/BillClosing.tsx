@@ -26,7 +26,7 @@ export function BillClosing({ budget, line, actions, readOnly = false, potAvaila
     <div className="bill-closing">
       {closure ? (
         <>
-          <p className="bill-closed-status"><CheckCircle2 size={16} aria-hidden="true" />Clôturé</p>
+          <p className="bill-closed-status"><CheckCircle2 size={16} aria-hidden="true" />Facture clôturée</p>
           <p>{euro(closure.amountCents)} versés au pot commun.</p>
           {editable && actions.reopenBill && <button type="button" className="text-button"
             onClick={() => actions.reopenBill?.(line.id)} aria-label={`Rouvrir la facture · ${line.name}`}>

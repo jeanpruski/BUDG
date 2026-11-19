@@ -2263,3 +2263,13 @@ dialog::backdrop {
 .header-actions .budget-toolbar {
   margin: 0;
 }
+
+@media (min-width: 761px) {
+  .app-shell > main.envelopes-view { padding-top: 24px; padding-bottom: 32px; }
+  .app-shell main.envelopes-view > header { margin-bottom: 16px; }
+  .envelopes-view .group-title { margin: 14px 0 10px; }
+  .envelopes-view .envelopes { gap: 12px; }
+}
+@media (min-width: 1680px) {
+  .envelopes-view .envelopes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

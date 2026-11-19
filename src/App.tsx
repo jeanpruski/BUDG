@@ -476,7 +476,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
           </>}
         </div>
       </aside>
-      <main>
+      <main className={view === "budget" ? "envelopes-view" : undefined}>
         <header>
           <div>
             <p className="eyebrow">

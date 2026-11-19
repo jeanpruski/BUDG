@@ -16,3 +16,18 @@
   .envelope > .envelope-card-trigger { padding: 14px; }
   .envelope-card-trigger .envelope-name { font-size: 14px; }
 }
+
+@media (min-width: 761px) {
+  .envelope > .envelope-card-trigger { padding: 15px; }
+  .envelope .envelope-card-trigger > .section-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start; gap: 7px; margin-bottom: 9px;
+  }
+  .envelope-card-trigger .envelope-title { gap: 7px; }
+  .envelope-card-trigger .envelope-symbol { width: 26px; height: 26px; flex-shrink: 0; border-radius: 7px; }
+  .envelope-card-trigger .envelope-symbol svg { width: 16px; height: 16px; }
+  .envelope-card-trigger .envelope-name { line-height: 1.35; }
+  .envelope-card-trigger .badge { padding: 4px 6px; }
+  .envelope-card-trigger .envelope-amount strong { font-size: 24px; }
+  .envelope .envelope-card-trigger > progress { margin: 8px 0 5px; }
+}
