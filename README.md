@@ -45,6 +45,16 @@ BUDG s’ouvre sur **http://127.0.0.1:1420**. Gardez le terminal ouvert pendant 
 6. Le surplus non dépensé rejoint **Pot commun**. Il reste sur le compte commun ; aucun virement personnel n’est nécessaire. Vous pouvez y enregistrer les achats payés avec ce pot.
 7. **Préparer le mois suivant** reprend les enveloppes et les réserves, applique les salaires du nouveau mois et remet les opérations à zéro.
 
+### Versements anticipés et prévision
+
+Dans **Versements**, un virement déjà reçu peut être affecté au mois courant ou au mois prochain, dès n’importe quel jour du mois. **Prévision du mois prochain** reprend les salaires préparés (ou les salaires habituels), les montants programmés et les exceptions : contribution de chacun, avances reçues, somme encore réservée, complément à verser et reste personnel estimé avant les autres dépenses. Les objectifs des réserves restent dus en totalité, indépendamment de leur stock reporté.
+
+Une avance ne finance pas les enveloppes courantes et n’alimente pas automatiquement le pot commun. **Utiliser une partie** retire un montant de l’avance vers le pot, avec possibilité d’alimenter directement une enveloppe dans la même opération. L’argent ne quitte pas le compte : seule son affectation change. Une dépense réelle reste à enregistrer dans son mois de paiement. **Rendre à l’avance** rétablit la réservation si le pot contient encore la somme ; un transfert vers une enveloppe peut d’abord être annulé si cet argent n’a pas été dépensé.
+
+Exemple : 500 € reçus pour décembre, dont 50 € utilisés en novembre, donnent 450 € de financement à l’ouverture de décembre et un complément de 50 € si la contribution prévue est 500 €. L’historique conserve les 500 € reçus et l’utilisation des 50 €. La reprise n’ajoute aucune nouvelle rentrée bancaire. Le reste personnel prévisionnel soustrait les avances déjà versées et le complément restant du salaire prévu ; une avance utilisée augmente donc le complément.
+
+La **Vue d’ensemble** présente le **Solde réel du compte commun**, incluant les avances, leur montant réservé et le **Solde hors avances**. Ce dernier comprend encore les enveloppes et les réserves du mois courant : ce n’est pas de l’argent entièrement libre. Les archives, l’audit et les rapports conservent les avances et leurs utilisations. Une fois le mois d’origine clôturé, leurs traces sont verrouillées ; les versements repris dans le mois suivant sont identifiés et ne peuvent pas être supprimés comme de nouveaux virements.
+
 Le solde est calculé à partir des opérations saisies. BUDG ne se connecte pas à votre banque et n’effectue aucun virement. Le premier mois commence avec un solde à zéro : les sommes déjà versées pour ce mois doivent être enregistrées comme versements.
 
 ## Répartition, reste personnel et pot commun
@@ -81,7 +91,7 @@ Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêt
 
 Pour une facture différée, ce bouton active un report conservé dans l’enveloppe au lieu de libérer son surplus au pot. Le report reste protégé jusqu’à sa consommation, sans changer le type habituel ni la programmation de la facture. Une facture retrouve son fonctionnement habituel au début du mois suivant l’épuisement de ce report. La clôture habituelle d’une facture reste une action distincte qui libère son surplus au pot.
 
-Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V8 reprend les budgets V3 à V7 sans inventer de dépense ou de report ; un ancien client ne peut écraser un budget V8.
+Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V9 reprend les budgets V3 à V8 sans inventer de dépense, de report ou d’avance ; les anciens clients doivent recharger la page avant d’enregistrer.
 
 ## Clôture et historique
 

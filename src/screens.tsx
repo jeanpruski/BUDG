@@ -275,14 +275,14 @@ export function Transactions({
                 {displayDate(e.date)} ·{" "}
                 {"lineId" in e
                   ? budget.lines.find((l) => l.id === e.lineId)?.name
-                  : e.note || "Vers le compte commun"}
+                  : "advanceId" in e && e.advanceId ? `Avance affectée à ${budget.label}${e.note ? ` · ${e.note}` : ""}` : e.note || "Vers le compte commun"}
               </small>
             </div>
             <b className={expenses ? "" : "text-green"}>
               {expenses ? "−" : "+"}
               {euro(e.amountCents)}
             </b>
-            {!readOnly && !closed && (
+            {!readOnly && !closed && !("advanceId" in e && e.advanceId) && (
               <div className="actions">
                 <button
                   className="icon-button"
@@ -326,6 +326,10 @@ export function CommonPot({
   const pot = potSummary(state);
   const currentSummary = budgetSummary(state.budget);
   const entries = [
+    ...state.advanceUses.map((use) => ({ id: `advance-${use.id}`, month: use.month, date: displayDate(use.date),
+      description: `Depuis une avance du mois prochain${use.note ? ` · ${use.note}` : ""}`, amount: use.amountCents, order: use.order,
+      expense: undefined as PotExpense | undefined, transfer: undefined as PotTransfer | undefined,
+    })),
     ...pot.credits
       .filter((b) => b.closedPotCents > 0)
       .map((b) => ({
@@ -399,9 +403,9 @@ export function CommonPot({
         />
         <Metric
           icon={ArrowDownLeft}
-          label="Surplus cumulés"
+          label="Sommes ajoutées au pot"
           value={euro(pot.receivedCents)}
-          detail="Ajoutés lors des clôtures"
+          detail="Surplus de clôture et avances utilisées"
         />
         <Metric
           icon={ShoppingBag}

@@ -8,7 +8,7 @@ export type PublicUser = { id: string; email: string; displayName: string; role:
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer" | "billClosure" | "envelopeMonth"; month: string; id: string; value: unknown };
+type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer" | "billClosure" | "envelopeMonth" | "advancePayment" | "advanceUse"; month: string; id: string; value: unknown };
 export type MonthlyCaptureOptions = { timeZone?: string; now?: Date };
 type SaveOptions = MonthlyCaptureOptions & { allowHistoryRewrite?: boolean };
 function financialEntities(state: AppState | null): Map<string, AuditEntity> {
@@ -27,6 +27,8 @@ function financialEntities(state: AppState | null): Map<string, AuditEntity> {
   }
   for (const value of state.potExpenses)
     add({ type: "potExpense", month: value.date.slice(0, 7), id: value.id, value });
+  for (const value of state.advancePayments) add({ type: "advancePayment", month: value.receivedMonth, id: value.id, value });
+  for (const value of state.advanceUses) add({ type: "advanceUse", month: value.month, id: value.id, value });
   return result;
 }
 export async function writeAudit(client: Pick<PoolClient, "query">, before: AppState | null, after: AppState, actor: PublicUser) {
@@ -63,7 +65,12 @@ export async function captureMonthlyArchives(
     // New-month activity must not replace an older month's provisional evidence.
     const oldPot = before?.potExpenses.filter((expense) => expense.date.slice(0, 7) === month.id) || [];
     const nextPot = after.potExpenses.filter((expense) => expense.date.slice(0, 7) === month.id);
-    return JSON.stringify(old) !== JSON.stringify(month) || JSON.stringify(oldPot) !== JSON.stringify(nextPot);
+    const related = (state: AppState | null) => [
+      state?.advancePayments.filter((payment) => payment.receivedMonth === month.id) || [],
+      state?.advanceUses.filter((use) => use.month === month.id) || [],
+    ];
+    return JSON.stringify(old) !== JSON.stringify(month) || JSON.stringify(oldPot) !== JSON.stringify(nextPot) ||
+      JSON.stringify(related(before)) !== JSON.stringify(related(after));
   });
   if (!candidates.length) return [];
   const audit = (await client.query("SELECT * FROM budg_audit ORDER BY id")).rows;
@@ -102,11 +109,15 @@ function checkClosedPotMovements(before: AppState, after: AppState) {
   for (const month of [before.budget, ...before.archivedBudgets]) {
     if (month.status !== "CLOSED") continue;
     const next = months.get(month.id);
+    const advances = (state: AppState) => [state.advancePayments.filter((p) => p.receivedMonth === month.id), state.advanceUses.filter((use) => use.month === month.id)];
+    if (!isDeepStrictEqual(advances(before), advances(after)))
+      throw new ApiError(422, "Les avances et leurs utilisations d’un mois clôturé sont verrouillées.");
     if (next ? !isDeepStrictEqual(movements(month), movements(next)) : month.potTransfers.length || month.billClosures.length || month.lines.some((line) => line.openingPotCents > 0 || line.monthFinished || line.carryRemainder))
       throw new ApiError(422, "Les mouvements d’un mois clôturé sont verrouillés. Utilisez une restauration explicite pour revenir à une sauvegarde.");
   }
   const ordered = (state: AppState) => new Map([
     ...state.potExpenses.map((entry) => [`pot:${entry.id}`, entry.order] as const),
+    ...state.advanceUses.map((entry) => [`advance-use:${entry.id}`, entry.order] as const),
     ...[state.budget, ...state.archivedBudgets].flatMap((month) => month.potTransfers.map((entry) => [`transfer:${month.id}:${entry.id}`, entry.order] as const)),
     ...[state.budget, ...state.archivedBudgets].filter((month) => month.closedOrder > 0).map((month) => [`month:${month.id}`, month.closedOrder] as const),
     ...[state.budget, ...state.archivedBudgets].flatMap((month) => month.billClosures.flatMap((closure) => [
@@ -169,7 +180,7 @@ export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: num
     const row = current.rows[0];
     if (Number(row?.revision || 0) !== expectedRevision)
       throw new ApiError(409, "Le budget a changé sur un autre appareil. Rechargez-le avant de continuer.");
-    if (row?.data.version === 8 && (raw as { version?: unknown }).version !== 8 && !options.allowHistoryRewrite)
+    if (Number(row?.data.version) >= 8 && (raw as { version?: unknown }).version !== 9 && !options.allowHistoryRewrite)
       throw new ApiError(409, "Une nouvelle version de BUDG est disponible. Rechargez la page avant de modifier le budget.");
     const before = row ? validateState(row.data) : null;
     if (before && !options.allowHistoryRewrite) checkClosedPotMovements(before, next);

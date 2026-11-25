@@ -1,5 +1,8 @@
 import {
   AppState,
+  AdvancePayment,
+  AdvanceUse,
+  paymentsFromAdvances,
   AmountPlan,
   AmountScope,
   Budget,
@@ -44,7 +47,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 8,
+    version: 9,
     revision: 0,
     potSequence: 0,
     configured: false,
@@ -81,6 +84,8 @@ export function initialState(month = today().slice(0, 7)): AppState {
     },
     archivedBudgets: [],
     potExpenses: [],
+    advancePayments: [],
+    advanceUses: [],
   };
 }
 export function membersForMonth(s: AppState, month: string): Member[] {
@@ -320,6 +325,8 @@ export function removeExpense(s: AppState, id: string) {
 }
 export function savePayment(s: AppState, payment: Payment) {
   active(s);
+  if (payment.advanceId || s.budget.payments.find((entry) => entry.id === payment.id)?.advanceId)
+    throw new Error("Ce versement provient d’une avance reçue le mois précédent. Son historique est conservé.");
   if (payment.date > today())
     throw new Error(
       "Enregistrez un versement uniquement après sa réception réelle.",
@@ -333,6 +340,8 @@ export function savePayment(s: AppState, payment: Payment) {
 }
 export function removePayment(s: AppState, id: string) {
   active(s);
+  if (s.budget.payments.find((entry) => entry.id === id)?.advanceId)
+    throw new Error("Ce versement provient d’une avance reçue le mois précédent. Son historique est conservé.");
   return withBudget(s, {
     ...s.budget,
     payments: s.budget.payments.filter((p) => p.id !== id),
@@ -478,6 +487,41 @@ export function reopenEnvelopeMonth(s: AppState, lineId: string) {
     ...entry, monthFinished: false,
   } : entry) });
 }
+export function saveAdvancePayment(s: AppState, payment: AdvancePayment) {
+  active(s);
+  const previous = s.advancePayments.find((entry) => entry.id === payment.id);
+  if (payment.receivedMonth !== s.budget.id || payment.month !== nextMonth(s.budget.id) ||
+      (previous && previous.receivedMonth !== s.budget.id))
+    throw new Error("Choisissez le mois prochain pour un versement anticipé.");
+  return validateState({ ...s, advancePayments: previous
+    ? s.advancePayments.map((entry) => entry.id === payment.id ? payment : entry)
+    : [...s.advancePayments, payment] });
+}
+export function removeAdvancePayment(s: AppState, id: string) {
+  active(s);
+  const payment = s.advancePayments.find((entry) => entry.id === id);
+  if (!payment || payment.receivedMonth !== s.budget.id) throw new Error("Cette avance appartient à un mois clôturé.");
+  if (s.advanceUses.some((use) => use.advanceId === id)) throw new Error("Rendez d’abord l’argent utilisé à cette avance avant de la supprimer.");
+  return validateState({ ...s, advancePayments: s.advancePayments.filter((entry) => entry.id !== id) });
+}
+export function useAdvance(s: AppState, input: Omit<AdvanceUse, "order" | "month">, lineId?: string) {
+  active(s);
+  const payment = s.advancePayments.find((entry) => entry.id === input.advanceId);
+  if (!payment || payment.receivedMonth !== s.budget.id) throw new Error("Cette avance n’est plus disponible pour le mois courant.");
+  if (s.advanceUses.some((entry) => entry.id === input.id)) throw new Error("Cette utilisation existe déjà.");
+  const use: AdvanceUse = { ...input, month: s.budget.id, order: nextPotOrder(s) };
+  const next = validateState({ ...s, potSequence: use.order, advanceUses: [...s.advanceUses, use] });
+  return lineId ? savePotTransfer(next, { id: `advance-use:${use.id}`, lineId,
+    amountCents: use.amountCents, date: use.date, note: "Depuis une avance du mois prochain" }) : next;
+}
+export function removeAdvanceUse(s: AppState, id: string) {
+  active(s);
+  const use = s.advanceUses.find((entry) => entry.id === id);
+  if (!use || use.month !== s.budget.id) throw new Error("Cette utilisation appartient à un mois clôturé.");
+  if (potSummary(s).availableCents < use.amountCents) throw new Error("Remettez d’abord cette somme dans le pot commun pour la rendre à l’avance.");
+  return validateState({ ...s, advanceUses: s.advanceUses.filter((entry) => entry.id !== id) });
+}
+
 export function startNextMonth(s: AppState) {
   if (s.budget.status !== "CLOSED")
     throw new Error("Clôturez le mois en cours avant de préparer le suivant.");
@@ -515,7 +559,7 @@ export function startNextMonth(s: AppState) {
         openingPotCents: summary.lines.find((entry) => entry.id === l.id)!.reservedPotCents,
       })),
       expenses: [],
-      payments: [],
+      payments: paymentsFromAdvances(s, month),
       potTransfers: [],
       billClosures: [],
       refunds: [],

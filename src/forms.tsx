@@ -2,6 +2,7 @@ import { AllocationFields } from "./AllocationFields";
 import { useState } from "react";
 import {
   AppState,
+  AdvancePayment,
   Member,
   BudgetLine,
   Expense,
@@ -13,6 +14,7 @@ import {
   parseMoney,
   today,
 } from "./domain";
+import { nextMonthForecast } from "./futureBudget";
 import { monthlyIncomePreview } from "./monthlyIncome";
 import { membersForMonth } from "./store";
 import { Field, Form } from "./ui";
@@ -163,7 +165,7 @@ export function LineForm({
     </Form>
   );
 }
-function transactionDate(month: string) {
+export function transactionDate(month: string) {
   return today().slice(0, 7) === month ? today() : `${month}-01`;
 }
 export function ExpenseForm({
@@ -258,74 +260,41 @@ function monthEnd(month: string) {
   return `${month}-${new Date(year, m, 0).getDate()}`;
 }
 export function PaymentForm({
-  state,
-  memberId,
-  payment,
-  busy,
-  submit,
+  state, memberId, payment, advance, defaultMonth, busy, submit,
 }: {
-  state: AppState;
-  memberId?: string;
-  payment?: Payment;
-  busy: boolean;
-  submit: (data: FormData) => void;
+  state: AppState; memberId?: string; payment?: Payment; advance?: AdvancePayment;
+  defaultMonth?: string; busy: boolean; submit: (data: FormData) => void;
 }) {
-  const [selected, setSelected] = useState(
-    payment?.memberId ?? memberId ?? state.members[0].id,
-  );
-  const balance = budgetSummary(state.budget).balances.find(
-    (m) => m.id === selected,
-  )!;
-  return (
-    <Form busy={busy} submit={submit}>
-      <p className="hint">
-        Enregistrez un virement déjà reçu. Un virement prévu ne finance pas
-        encore les enveloppes.
-      </p>
-      <label className="field">
-        Qui a versé ?
-        <select
-          name="memberId"
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          {state.members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="form-context">
-        Déjà versé : {euro(balance.paid)} · Encore attendu :{" "}
-        <b>{euro(balance.remaining)}</b>
-      </p>
-      <div key={selected}>
-        <Field
-          label="Montant reçu (€)"
-          name="amount"
-          value={
-            payment ? payment.amountCents / 100 : balance.remaining / 100 || ""
-          }
-        />
-      </div>
-      <Field
-        label="Date de réception"
-        name="date"
-        type="date"
-        value={payment?.date ?? transactionDate(state.budget.id)}
-        min={`${state.budget.id}-01`}
-        max={monthEnd(state.budget.id)}
-      />
-      <Field
-        label="Note (facultative)"
-        name="note"
-        value={payment?.note}
-        required={false}
-        placeholder="Ex. Virement du mois"
-      />
-    </Form>
-  );
+  const [selected, setSelected] = useState(payment?.memberId ?? advance?.memberId ?? memberId ?? state.members[0].id);
+  const [month, setMonth] = useState(advance?.month ?? defaultMonth ?? state.budget.id);
+  const following = nextMonth(state.budget.id), anticipated = month === following;
+  const forecast = nextMonthForecast(state);
+  const balance = budgetSummary(state.budget).balances.find((member) => member.id === selected)!;
+  const future = forecast.members.find((member) => member.id === selected)!;
+  const remaining = anticipated ? future.remainingCents : balance.remaining;
+  const fixedMonth = !!payment || !!advance;
+  return <Form busy={busy} submit={submit}>
+    <p className="hint">{anticipated
+      ? `Enregistrez un virement déjà reçu pour ${monthLabel(following)}, quelle que soit la date du mois. Il reste réservé et ne finance pas les enveloppes du mois courant.`
+      : "Enregistrez un virement déjà reçu. Un virement prévu ne finance pas encore les enveloppes."}</p>
+    <label className="field">À quel mois affecter ce versement ?
+      <select name="month" value={month} disabled={fixedMonth} onChange={(event) => setMonth(event.target.value)}>
+        <option value={state.budget.id}>Ce mois-ci · {monthLabel(state.budget.id)}</option>
+        <option value={following}>Mois prochain · {monthLabel(following)}</option>
+      </select>
+    </label>
+    {fixedMonth && <input type="hidden" name="month" value={month} />}
+    <label className="field">Qui a versé ?
+      <select name="memberId" value={selected} onChange={(event) => setSelected(event.target.value)}>
+        {state.members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+      </select>
+    </label>
+    <p className="form-context">{anticipated ? "Déjà réservé" : "Déjà versé"} : {euro(anticipated ? future.availableCents : balance.paid)} · Encore attendu : <b>{euro(remaining)}</b></p>
+    {advance && state.advanceUses.some((use) => use.advanceId === advance.id) && <p className="hint">Une partie de cette avance a déjà été utilisée. Le montant total reçu doit rester au moins égal à la somme utilisée.</p>}
+    <div key={`${selected}:${month}`}><Field label="Montant reçu (€)" name="amount" value={payment ? payment.amountCents / 100 : advance ? advance.amountCents / 100 : remaining / 100 || ""} /></div>
+    <Field label="Date de réception" name="date" type="date" value={payment?.date ?? advance?.date ?? transactionDate(state.budget.id)} min={`${state.budget.id}-01`} max={transactionDate(state.budget.id)} />
+    <Field label="Note (facultative)" name="note" value={payment?.note ?? advance?.note} required={false} placeholder={anticipated ? "Ex. Salaire reçu en avance" : "Ex. Virement du mois"} />
+  </Form>;
 }
 
 export function MonthlyIncomeForm({
@@ -392,10 +361,8 @@ export function MonthlyIncomeForm({
             <strong>{member.name}</strong>
             <dl>
               <div><dt>Contribution prévue</dt><dd>{euro(member.expected)}</dd></div>
-              {current && <>
-                <div><dt>Déjà versé</dt><dd>{euro(member.paid)}</dd></div>
-                <div><dt>Reste à verser</dt><dd>{euro(member.remaining)}</dd></div>
-              </>}
+              <div><dt>{current ? "Déjà versé" : "Déjà réservé en avance"}</dt><dd>{euro(member.paid)}</dd></div>
+              <div><dt>{current ? "Reste à verser" : "Complément à verser"}</dt><dd>{euro(member.remaining)}</dd></div>
             </dl>
             {member.overpaid > 0 && <p className="hint">Les versements déjà enregistrés dépassent cette contribution de {euro(member.overpaid)}. Ils restent pris en compte.</p>}
             {current && member.remaining > Math.max(0, member.expected - member.paid) && <p className="hint">Le reste à verser inclut les dépenses qui dépassent le budget prévu.</p>}

@@ -1,4 +1,4 @@
-import { AppState, amountForMonth, budgetSummary, nextMonth, sharesFor } from "./domain";
+import { AppState, advanceSummary, amountForMonth, budgetSummary, nextMonth, sharesFor } from "./domain";
 
 export function monthlyIncomePreview(state: AppState, incomes: number[], current: boolean) {
   const members = state.members.map((member, index) => ({
@@ -26,12 +26,12 @@ export function monthlyIncomePreview(state: AppState, incomes: number[], current
   }) : null;
   return members.map((member) => {
     const balance = summary?.balances.find((balance) => balance.id === member.id);
-    const paid = balance?.paid ?? 0;
+    const paid = balance?.paid ?? advanceSummary(state, month).payments.filter((p) => p.memberId === member.id).reduce((sum, p) => sum + p.availableCents, 0);
     return {
       ...member,
       expected: expected[member.id],
       paid,
-      remaining: balance?.remaining ?? expected[member.id],
+      remaining: balance?.remaining ?? Math.max(0, expected[member.id] - paid),
       overpaid: Math.max(0, paid - expected[member.id]),
     };
   });

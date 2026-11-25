@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { budgetSummary, euro, validateState, type AppState } from "../src/domain";
-import { closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
+import { saveAdvancePayment, useAdvance, closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
 
@@ -207,7 +207,7 @@ describe("comptes rendus mensuels par email", () => {
     const before = JSON.stringify(legacy);
     const report = await renderMonthlyReport(legacy, "monthly");
     const state = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
-    expect(state.version).toBe(8);
+    expect(state.version).toBe(9);
     expect(state.budget.potTransfers).toEqual([]);
     expect(state.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(monthlyReportData(legacy).potBalanceCents).toBe(47655);
@@ -311,4 +311,29 @@ describe("comptes rendus mensuels par email", () => {
     expect(current.reserveProvisions.fundedCents).toBe(60000);
     expect(current.reserveBalanceCents).toBe(100000);
   });
+  it("sépare le solde réel, les avances et les versements affectés au mois dans le rapport", async () => {
+    let s = fund(envelope(setup(), "Courses", 100000, "DAILY_LIFE"));
+    s = saveAdvancePayment(s, { id: "early", memberId: "jean", date: "2026-08-05", receivedMonth: "2026-08", month: "2026-09", amountCents: 50000, note: "Anticipation" });
+    s = useAdvance(s, { id: "use", advanceId: "early", date: "2026-08-10", amountCents: 5000, note: "Imprévu" });
+    const data = monthlyReportData(snapshot(s));
+    expect(data.receivedCents).toBe(100000);
+    expect(data.accountBalanceCents).toBe(150000);
+    expect(data.reservedAdvancesCents).toBe(45000);
+    expect(data.potBalanceCents).toBe(5000);
+    expect(data.spentCents).toBe(0);
+    const report = await renderMonthlyReport(snapshot(s), "monthly");
+    expect(report.html).toContain("Solde hors avances");
+    expect(report.text).toContain(euro(45000));
+    expect(report.attachments.find(file => file.filename.endsWith('.pdf'))?.content.subarray(0, 4).toString()).toBe("%PDF");
+    const reopened = startNextMonth(closeMonth(s));
+    const previous = monthlyReportData(snapshot(reopened, "2026-08"));
+    expect(previous.accountBalanceCents).toBe(150000);
+    expect(previous.receivedCents).toBe(100000);
+    const following = monthlyReportData(snapshot(reopened));
+    expect(following.accountBalanceCents).toBe(150000);
+    expect(following.receivedCents).toBe(45000);
+    expect(following.reservedAdvancesCents).toBe(0);
+    expect(following.operations.filter(entry => entry.type === "Avance affectée au mois")).toHaveLength(1);
+  });
+
 });

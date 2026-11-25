@@ -54,7 +54,16 @@ const expenseSchema = z.object({
   date: dateSchema,
   description: z.string().trim().max(200),
 });
+const advancePaymentSchema = z.object({
+  id, memberId: id, amountCents: money.positive(), date: dateSchema,
+  note: z.string().trim().max(200), receivedMonth: monthSchema, month: monthSchema,
+});
+const advanceUseSchema = z.object({
+  id, advanceId: id, amountCents: money.positive(), date: dateSchema,
+  note: z.string().trim().max(200), month: monthSchema, order,
+});
 const paymentSchema = z.object({
+  advanceId: id.optional(),
   id,
   memberId: id,
   amountCents: money.positive(),
@@ -109,7 +118,7 @@ const budgetSchema = z.object({
   closedAt: z.string().optional(),
 });
 export const stateSchema = z.object({
-  version: z.literal(8),
+  version: z.literal(9),
   revision: z.number().int().nonnegative(),
   potSequence: z.number().int().nonnegative().safe(),
   configured: z.boolean(),
@@ -120,6 +129,8 @@ export const stateSchema = z.object({
   budget: budgetSchema,
   archivedBudgets: z.array(budgetSchema),
   potExpenses: z.array(potExpenseSchema),
+  advancePayments: z.array(advancePaymentSchema).default([]),
+  advanceUses: z.array(advanceUseSchema).default([]),
 });
 export type Member = z.infer<typeof memberSchema>;
 export type Share = z.infer<typeof shareSchema>;
@@ -131,6 +142,8 @@ export type PotExpense = z.infer<typeof potExpenseSchema>;
 export type PotTransfer = z.infer<typeof potTransferSchema>;
 export type BillClosure = z.infer<typeof billClosureSchema>;
 export type Payment = z.infer<typeof paymentSchema>;
+export type AdvancePayment = z.infer<typeof advancePaymentSchema>;
+export type AdvanceUse = z.infer<typeof advanceUseSchema>;
 export type Budget = z.infer<typeof budgetSchema>;
 export type AppState = z.infer<typeof stateSchema>;
 export type AllocationType = BudgetLine["allocationType"];
@@ -469,11 +482,11 @@ export function accountBalance(state: AppState) {
     sum(
       [state.budget, ...state.archivedBudgets].map(
         (b) =>
-          sum(b.payments.map((p) => p.amountCents)) -
+          sum(b.payments.filter((p) => !p.advanceId).map((p) => p.amountCents)) -
           sum(b.expenses.map((e) => e.amountCents)) -
           sum(b.refunds.filter((r) => r.paidOn).map((r) => r.amountCents)),
       ),
-    ) - sum(state.potExpenses.map((e) => e.amountCents))
+    ) + sum(state.advancePayments.map((p) => p.amountCents)) - sum(state.potExpenses.map((e) => e.amountCents))
   );
 }
 export function potSummary(state: AppState) {
@@ -485,7 +498,8 @@ export function potSummary(state: AppState) {
   })));
   const billReopenedCents = sum(billCredits.filter((closure) => closure.reopened).map((closure) => closure.amountCents));
   const billReleasedCents = sum(billCredits.map((closure) => closure.amountCents)) - billReopenedCents;
-  const receivedCents = sum(credits.map((b) => b.closedPotCents)) + sum(billCredits.map((closure) => closure.amountCents));
+  const advanceUsedCents = sum(state.advanceUses.map((use) => use.amountCents));
+  const receivedCents = sum(credits.map((b) => b.closedPotCents)) + sum(billCredits.map((closure) => closure.amountCents)) + advanceUsedCents;
   const spentCents = sum(state.potExpenses.map((e) => e.amountCents));
   const transferredCents = sum([state.budget, ...state.archivedBudgets].flatMap((budget) => budget.potTransfers.map((transfer) => transfer.amountCents)));
   return {
@@ -493,6 +507,7 @@ export function potSummary(state: AppState) {
     billCredits,
     billReopenedCents,
     billReleasedCents,
+    advanceUsedCents,
     receivedCents,
     spentCents,
     transferredCents,
@@ -504,13 +519,58 @@ export function nextPotOrder(state: AppState) {
     ...budget.potTransfers.map((transfer) => transfer.order),
     ...budget.billClosures.flatMap((closure) => [closure.order, closure.reopened?.order ?? 0]),
   ]);
-  const next = Math.max(state.potSequence, ...orders, ...state.potExpenses.map((expense) => expense.order)) + 1;
+  const next = Math.max(state.potSequence, ...orders, ...state.potExpenses.map((expense) => expense.order), ...state.advanceUses.map((use) => use.order)) + 1;
   if (!Number.isSafeInteger(next)) throw new Error("Le journal des mouvements a atteint sa limite.");
   return next;
 }
+export function advanceSummary(state: AppState, month = nextMonth(state.budget.id)) {
+  const payments = state.advancePayments.filter((payment) => payment.month === month).map((payment) => {
+    const uses = state.advanceUses.filter((use) => use.advanceId === payment.id);
+    const usedCents = sum(uses.map((use) => use.amountCents));
+    return { ...payment, uses, usedCents, availableCents: payment.amountCents - usedCents };
+  });
+  return { payments, receivedCents: sum(payments.map((p) => p.amountCents)),
+    usedCents: sum(payments.map((p) => p.usedCents)), availableCents: sum(payments.map((p) => p.availableCents)) };
+}
+export function reservedAdvanceCents(state: AppState, month = state.budget.id) {
+  return sum(state.advancePayments.filter((payment) => payment.receivedMonth <= month && payment.month > month).map((payment) => payment.amountCents -
+    sum(state.advanceUses.filter((use) => use.advanceId === payment.id).map((use) => use.amountCents))));
+}
+export function paymentsFromAdvances(state: AppState, month: string): Payment[] {
+  return advanceSummary(state, month).payments.filter((p) => p.availableCents > 0).map((p) => ({
+    id: `advance:${p.id}`, advanceId: p.id, memberId: p.memberId,
+    amountCents: p.availableCents, date: p.date, note: p.note,
+  }));
+}
+function validateAdvances(state: AppState) {
+  const budgets = [state.budget, ...state.archivedBudgets];
+  for (const entries of [state.advancePayments, state.advanceUses])
+    if (new Set(entries.map((entry) => entry.id)).size !== entries.length) throw new Error("Avances ou utilisations dupliquées.");
+  for (const payment of state.advancePayments) {
+    if (!state.members.some((member) => member.id === payment.memberId) ||
+        !budgets.some((budget) => budget.id === payment.receivedMonth) ||
+        payment.date.slice(0, 7) !== payment.receivedMonth || payment.date > today() ||
+        payment.month !== nextMonth(payment.receivedMonth)) throw new Error("Versement anticipé rattaché au mauvais mois ou à un membre inconnu.");
+    const uses = state.advanceUses.filter((use) => use.advanceId === payment.id);
+    if (sum(uses.map((use) => use.amountCents)) > payment.amountCents) throw new Error("Le montant dépasse l’avance encore réservée.");
+    for (const use of uses) if (use.month !== payment.receivedMonth || use.date.slice(0, 7) !== use.month || use.date < payment.date || use.date > today())
+      throw new Error("Utilisation de l’avance à une date invalide.");
+    const target = budgets.find((budget) => budget.id === payment.month);
+    if (target) {
+      const expected = paymentsFromAdvances(state, target.id).filter((entry) => entry.advanceId === payment.id);
+      const actual = target.payments.filter((entry) => entry.advanceId === payment.id);
+      if (actual.length !== expected.length || actual.some((entry) => !expected.some((value) => value.id === entry.id && value.advanceId === entry.advanceId && value.memberId === entry.memberId && value.amountCents === entry.amountCents && value.date === entry.date && value.note === entry.note))) throw new Error("L’avance reportée ne correspond pas à son montant encore réservé.");
+    }
+  }
+  if (state.advanceUses.some((use) => !state.advancePayments.some((p) => p.id === use.advanceId))) throw new Error("Cette avance n’existe pas.");
+  for (const budget of budgets) for (const payment of budget.payments) if (payment.advanceId &&
+      !state.advancePayments.some((advance) => advance.id === payment.advanceId && advance.month === budget.id))
+    throw new Error("Versement issu d’une avance inconnue ou du mauvais mois.");
+}
+
 function migrateState(raw: unknown): unknown {
-  if (raw && typeof raw === "object" && "version" in raw && raw.version === 7)
-    return { ...raw, version: 8 };
+  if (raw && typeof raw === "object" && "version" in raw && [7, 8].includes(Number(raw.version)))
+    return { ...raw, version: 9 };
   if (raw && typeof raw === "object" && "version" in raw && raw.version === 6) {
     const legacyTransfer = potTransferSchema.omit({ order: true });
     const legacyBudget = budgetSchema.omit({ billClosures: true, closedOrder: true }).extend({ potTransfers: z.array(legacyTransfer).default([]) });
@@ -535,7 +595,7 @@ function migrateState(raw: unknown): unknown {
       }
       for (const expense of expenses.filter((entry) => entry.date.slice(0, 7) === month).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) expense.order = ++sequence;
     }
-    return { ...legacy, version: 8, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
+    return { ...legacy, version: 9, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
   }
   if (
     !raw ||
@@ -687,7 +747,7 @@ export function validateState(raw: unknown): AppState {
     }
     if (
       b.payments.some(
-        (p) => !ids.includes(p.memberId) || p.date.slice(0, 7) !== b.id,
+        (p) => !ids.includes(p.memberId) || (!p.advanceId && p.date.slice(0, 7) !== b.id),
       ) ||
       b.expenses.some(
         (e) =>
@@ -704,7 +764,7 @@ export function validateState(raw: unknown): AppState {
       );
     if (b.status === "CLOSED") {
       const summary = budgetSummary(b);
-      const lastMovement = Math.max(0, ...b.potTransfers.map((transfer) => transfer.order),
+      const lastMovement = Math.max(0, ...s.advanceUses.filter((use) => use.month === b.id).map((use) => use.order), ...b.potTransfers.map((transfer) => transfer.order),
         ...b.billClosures.flatMap((closure) => [closure.order, closure.reopened?.order ?? 0]));
       if (!b.closedOrder || b.closedOrder <= lastMovement)
         throw new Error("L’ordre de clôture mensuelle est invalide.");
@@ -740,6 +800,7 @@ export function validateState(raw: unknown): AppState {
     if (previous && nextMonth(previous.id) !== budget.id)
       throw new Error("Un mois manque dans l’historique.");
     const monthOrders = [
+      ...s.advanceUses.filter((use) => use.month === budget.id).map((use) => use.order),
       ...(budget.status === "CLOSED" ? [budget.closedOrder] : []),
       ...budget.potTransfers.map((transfer) => transfer.order),
       ...budget.billClosures.flatMap((closure) => [closure.order, ...(closure.reopened ? [closure.reopened.order] : [])]),
@@ -769,6 +830,7 @@ export function validateState(raw: unknown): AppState {
     )
       throw new Error("Une réserve reportée a disparu.");
   });
+  validateAdvances(s);
   if (new Set(s.potExpenses.map((e) => e.id)).size !== s.potExpenses.length)
     throw new Error("Dépenses du pot commun dupliquées.");
   if (potSummary(s).availableCents < 0)
@@ -782,7 +844,8 @@ export function validateState(raw: unknown): AppState {
       { order: closure.order, amount: closure.amountCents },
       ...(closure.reopened ? [{ order: closure.reopened.order, amount: -closure.amountCents }] : []),
     ]),
-  ]).concat(s.potExpenses.map((expense) => ({ order: expense.order, amount: -expense.amountCents })));
+  ]).concat(s.potExpenses.map((expense) => ({ order: expense.order, amount: -expense.amountCents })),
+    s.advanceUses.map((use) => ({ order: use.order, amount: use.amountCents })));
   if (new Set(movements.map((movement) => movement.order)).size !== movements.length)
     throw new Error("Ordres des mouvements du pot commun dupliqués.");
   if (s.potSequence < Math.max(0, ...movements.map((movement) => movement.order)))
@@ -806,6 +869,7 @@ export function validateState(raw: unknown): AppState {
     }
   }
   for (const expense of s.potExpenses) addDay(expense.date, -expense.amountCents);
+  for (const use of s.advanceUses) addDay(use.date, use.amountCents);
   let datedAvailable = 0;
   for (const [, amount] of [...daily].sort(([a], [b]) => a.localeCompare(b))) {
     datedAvailable += amount;

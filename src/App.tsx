@@ -5,6 +5,8 @@ import { readAllocation } from "./AllocationFields";
 import { MobileMenu } from "./MobileMenu";
 import { MonthClosing } from "./MonthClosing";
 import { MonthlyIncomePanel } from "./MonthlyIncomePanel";
+import { FutureBudgetPanel } from "./FutureBudgetPanel";
+import { AdvanceUseForm } from "./AdvanceUseForm";
 import { EnvelopeAmountForm } from "./EnvelopeAmountForm";
 import { PotTransferForm } from "./PotTransferForm";
 import { BillCloseForm, BillReopenForm, activeBillClosure } from "./BillClosing";
@@ -35,6 +37,7 @@ import {
 } from "lucide-react";
 import {
   AppState,
+  AdvancePayment,
   AmountScope,
   BudgetLine,
   Expense,
@@ -71,6 +74,10 @@ import {
   saveLineAmount,
   removeLineAmount,
   savePayment,
+  saveAdvancePayment,
+  removeAdvancePayment,
+  useAdvance,
+  removeAdvanceUse,
   setSettled,
   confirmMonthlyIncomes,
   saveMonthlyIncomes,
@@ -100,7 +107,8 @@ type Dialog =
   | { type: "lineAmount"; lineId: string }
   | { type: "trackingStart" }
   | { type: "expense"; lineId?: string; expense?: Expense }
-  | { type: "payment"; memberId?: string; payment?: Payment }
+  | { type: "payment"; memberId?: string; payment?: Payment; advance?: AdvancePayment; month?: string }
+  | { type: "advanceUse"; advanceId: string }
   | { type: "close" }
   | { type: "monthlyIncome"; mode: "current" | "schedule" | "open" }
   | { type: "coach" }
@@ -612,6 +620,13 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     edit={() => open({ type: "monthlyIncome", mode: "current" })}
                     prepare={() => open({ type: "monthlyIncome", mode: "schedule" })}
                   />
+                  <FutureBudgetPanel state={state} readOnly={readOnly}
+                    add={() => open({ type: "payment", month: nextMonth(b.id) })}
+                    edit={(advance) => open({ type: "payment", advance })}
+                    use={(advanceId) => open({ type: "advanceUse", advanceId })}
+                    remove={(id) => confirm("Supprimer cette avance ?", "Le montant sera retiré du solde réel et de la somme réservée au mois prochain.", (s) => removeAdvancePayment(s, id))}
+                    returnUse={(id) => confirm("Rendre cette somme à l’avance ?", "La somme sera retirée du pot commun et à nouveau réservée au mois prochain. Si elle est encore dans une enveloppe, annulez d’abord son transfert vers cette enveloppe.", (s) => removeAdvanceUse(s, id))}
+                  />
                   <Members budget={b} actions={actions} readOnly={readOnly} />
                   <Transactions budget={b} actions={actions} mode="payments" readOnly={readOnly} />
                 </>
@@ -924,7 +939,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       {!readOnly && dialog?.type === "payment" && (
         <Modal
           title={
-            dialog.payment
+            dialog.payment || dialog.advance
               ? "Modifier le versement"
               : "Enregistrer un versement reçu"
           }
@@ -935,23 +950,39 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             state={state}
             memberId={dialog.memberId}
             payment={dialog.payment}
+            advance={dialog.advance}
+            defaultMonth={dialog.month}
             busy={busy}
             submit={(data) =>
               attempt(() => {
                 void submit(
-                  (s) =>
-                    savePayment(s, {
-                      id: dialog.payment?.id ?? uid(),
+                  (s) => {
+                    const payment = {
+                      id: dialog.advance?.id ?? dialog.payment?.id ?? uid(),
                       memberId: String(data.get("memberId")),
                       amountCents: parseMoney(data.get("amount")),
-                      date: String(data.get("date")),
-                      note: String(data.get("note")),
-                    }),
-                  "Versement enregistré : les enveloppes sont actualisées.",
+                      date: String(data.get("date")), note: String(data.get("note")),
+                    };
+                    const month = String(data.get("month"));
+                    if (month === nextMonth(s.budget.id)) return saveAdvancePayment(s, { ...payment, receivedMonth: s.budget.id, month });
+                    if (month !== s.budget.id) throw new Error("Choisissez le mois courant ou le mois prochain.");
+                    return savePayment(s, payment);
+                  },
+                  String(data.get("month")) === nextMonth(b.id) ? "Avance enregistrée et réservée au mois prochain." : "Versement enregistré : les enveloppes sont actualisées.",
                 );
               })
             }
           />
+        </Modal>
+      )}
+      {!readOnly && dialog?.type === "advanceUse" && (
+        <Modal title="Utiliser une partie de l’avance" close={closeDialog}>
+          {activeDialogError}
+          <AdvanceUseForm state={state} advanceId={dialog.advanceId} busy={busy} submit={(data) => attempt(() => {
+            void submit((s) => useAdvance(s, { id: uid(), advanceId: dialog.advanceId,
+              amountCents: parseMoney(data.get("amount")), date: String(data.get("date")), note: String(data.get("note")),
+            }, String(data.get("lineId")) || undefined), "Somme rendue disponible ce mois. La prévision du mois prochain est actualisée.");
+          })} />
         </Modal>
       )}
       {!readOnly && dialog?.type === "coach" && (

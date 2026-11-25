@@ -54,6 +54,8 @@ describe("bilan synthétique du mois", () => {
     expect(monthOverview(state)).toEqual({
       spentCents: 0,
       accountBalanceCents: 0,
+      reservedAdvanceCents: 0,
+      balanceExcludingAdvancesCents: 0,
       missingCents: 120000,
       reserveProvisions: {
         fundedCents: 0,

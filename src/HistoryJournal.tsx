@@ -12,9 +12,9 @@ export type HistoryJournalEntry = {
   envelopeLabel: string;
   description: string;
   amountCents: number;
-  source: "envelope" | "pot" | "transfer" | "billRelease" | "billReopen";
+  source: "envelope" | "pot" | "transfer" | "billRelease" | "billReopen" | "advanceUse";
 };
-const internalEntry = (entry: HistoryJournalEntry) => entry.source === "transfer" || entry.source === "billRelease" || entry.source === "billReopen";
+const internalEntry = (entry: HistoryJournalEntry) => entry.source === "transfer" || entry.source === "billRelease" || entry.source === "billReopen" || entry.source === "advanceUse";
 
 /** Internal transfers stay distinct from spending; contributions are managed in Versements. */
 export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
@@ -74,6 +74,9 @@ export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
       source: "pot",
     });
   }
+  for (const use of state.advanceUses) entries.push({ id: `advance-use:${use.id}`, date: use.date, month: use.month,
+    monthLabel: monthLabels.get(use.month) || monthLabel(use.month), envelopeKey: "advance", envelopeLabel: "Avance du mois prochain",
+    description: use.note || "Avance rendue disponible dans le pot commun", amountCents: use.amountCents, source: "advanceUse" });
   return entries.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 }
 
@@ -177,7 +180,7 @@ export function HistoryJournal({ state }: { state: AppState }) {
                 <div className="history-journal-meta">
                   <time dateTime={entry.date}>{displayDate(entry.date)}</time>
                   <span className={entry.source === "pot" ? "history-journal-pot" : ""}>
-                    {entry.source === "billRelease" ? `${entry.envelopeLabel} → Pot commun` : internalEntry(entry) ? `Pot commun → ${entry.envelopeLabel}` : entry.envelopeLabel}
+                    {(entry.source === "billRelease" || entry.source === "advanceUse") ? `${entry.envelopeLabel} → Pot commun` : internalEntry(entry) ? `Pot commun → ${entry.envelopeLabel}` : entry.envelopeLabel}
                   </span>
                   {internalEntry(entry) && <span className="pot-transfer-tag">Transfert interne</span>}
                 </div>

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
-import { dateSchema, monthSchema, stateSchema, validateState, type AppState } from "../src/domain";
+import { dateSchema, monthSchema, stateSchema, validateState, nextMonth, type AppState } from "../src/domain";
 import { captureMonthlyArchives } from "./storage";
 
 type JobConfig = { backupDir: string; timeZone: string };
@@ -26,7 +26,9 @@ const money = z.number().int().positive().max(1_000_000_000);
 const baseOperation = z.object({ id: z.string().min(1), amountCents: money, date: dateSchema });
 const operationSchemas = {
   expense: baseOperation.extend({ lineId: z.string().min(1), description: z.string().max(200) }),
-  payment: baseOperation.extend({ memberId: z.string().min(1), note: z.string().max(200) }),
+  payment: baseOperation.extend({ memberId: z.string().min(1), note: z.string().max(200), advanceId: z.string().min(1).optional() }),
+  advancePayment: stateSchema.shape.advancePayments.removeDefault().element,
+  advanceUse: stateSchema.shape.advanceUses.removeDefault().element,
   potExpense: baseOperation.extend({ description: z.string().min(1).max(200), order: z.number().int().positive().safe().optional() }),
   potTransfer: baseOperation.extend({ lineId: z.string().min(1), note: z.string().max(200), order: z.number().int().positive().safe().optional() }),
   envelopeMonth: z.object({ id: z.string().min(1), date: dateSchema, monthFinished: z.boolean(), carryRemainder: z.boolean() }),
@@ -38,7 +40,7 @@ const auditSchema = z.object({
   actor_user_id: z.string().uuid(),
   actor_email: z.string().min(1),
   actor_display_name: z.string().min(1),
-  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer", "billClosure", "envelopeMonth"]),
+  entity_type: z.enum(["expense", "payment", "potExpense", "potTransfer", "billClosure", "envelopeMonth", "advancePayment", "advanceUse"]),
   entity_id: z.string().min(1),
   entity_month: monthSchema,
   action: z.enum(["added", "updated", "deleted"]),
@@ -54,7 +56,9 @@ const auditSchema = z.object({
   for (const operation of [entry.before_data, entry.after_data]) {
     if (operation === null) continue;
     const result = operationSchemas[entry.entity_type].safeParse(operation);
-    if (!result.success || result.data.id !== entry.entity_id || result.data.date.slice(0, 7) !== entry.entity_month)
+    const advancePayment = entry.entity_type === "payment" && typeof operation.advanceId === "string";
+    if (!result.success || result.data.id !== entry.entity_id ||
+        (advancePayment ? nextMonth(result.data.date.slice(0, 7)) !== entry.entity_month : result.data.date.slice(0, 7) !== entry.entity_month))
       context.addIssue({ code: z.ZodIssueCode.custom, message: "Opération du journal invalide." });
     if (entry.entity_type === "billClosure") {
       const closure = operationSchemas.billClosure.safeParse(operation);

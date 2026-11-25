@@ -120,12 +120,18 @@ export function Dashboard({ state }: { state: AppState }) {
         </div>
       </section>
       </div>
-      <div className="metrics two overview-context">
+      <div className="metrics overview-context overview-context-with-advances">
         <Metric
           icon={Wallet}
-          label="Solde du compte commun"
+          label="Solde réel du compte commun"
+          detail={`Dont ${euro(overview.reservedAdvanceCents)} réservés pour le mois prochain`}
           value={euro(overview.accountBalanceCents)}
           tone={overview.accountBalanceCents < 0 ? "amber" : "green"}
+        />
+        <Metric icon={Wallet} label="Solde hors avances"
+          value={euro(overview.balanceExcludingAdvancesCents)}
+          detail="Inclut les enveloppes et réserves du mois courant"
+          tone={overview.balanceExcludingAdvancesCents < 0 ? "amber" : "green"}
         />
         <Metric
           icon={ArrowDownLeft}
