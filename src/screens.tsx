@@ -151,8 +151,10 @@ export function Envelopes({
   compact?: boolean;
   potAvailableCents?: number;
 }) {
-  const summary = budgetSummary(budget),
-    closed = budget.status === "CLOSED";
+  const summary = budgetSummary(budget);
+  const pendingLines = new Set(scheduledExpenses.filter((entry) => entry.month === budget.id).map((entry) => entry.lineId));
+  const statusOrder = (line: (typeof summary.lines)[number]) =>
+    line.billClosure || envelopeMonthFinished(line) ? 2 : pendingLines.has(line.id) ? 1 : 0;
   return (
     <>
       {(["DAILY_LIFE", "HOUSING"] as const).map((group) => (
@@ -176,7 +178,7 @@ export function Envelopes({
             {summary.lines
               .filter((l) => l.expenseGroup === group)
               .sort((a, b) =>
-                Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)) ||
+                statusOrder(a) - statusOrder(b) ||
                 envelopeDisplayOrder(a) - envelopeDisplayOrder(b))
               .map((line) => <EnvelopeCard key={`${budget.id}:${line.id}`} budget={budget} line={line}
                 actions={actions} readOnly={readOnly} compact={compact} potAvailableCents={potAvailableCents} scheduledExpenses={scheduledExpenses.filter((entry) => entry.lineId === line.id)} />)}

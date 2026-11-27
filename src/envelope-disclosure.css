@@ -32,3 +32,16 @@
   .envelope-card-trigger .envelope-amount strong { font-size: 24px; }
   .envelope .envelope-card-trigger > progress { margin: 8px 0 5px; }
 }
+
+.envelope.envelope-scheduled {
+  background: #eef4fb;
+  border-color: #c0d1e8;
+}
+.envelope.envelope-scheduled:hover { border-color: #91aecb; }
+.envelope.envelope-scheduled .envelope-symbol {
+  background: #dfeaf7;
+  color: #4d7196;
+}
+.envelope.envelope-scheduled progress::-webkit-progress-bar { background: #e2eaf3; }
+.envelope.envelope-scheduled progress::-webkit-progress-value { background: #6689ad; }
+.envelope.envelope-scheduled progress::-moz-progress-bar { background: #6689ad; }

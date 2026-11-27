@@ -25,7 +25,7 @@ export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvai
   const [open, setOpen] = useState(false);
   const { finished, label, tone, Icon } = envelopePresentation(line, budget);
   const pending = scheduledExpenses.some((entry) => entry.month === budget.id);
-  return <article className={`panel envelope envelope-${line.kind.toLowerCase()}${finished ? " envelope-closed" : ""}`}>
+  return <article className={`panel envelope envelope-${line.kind.toLowerCase()}${finished ? " envelope-closed" : pending ? " envelope-scheduled" : ""}`}>
     <button type="button" className="envelope-card-trigger" aria-haspopup="dialog"
       aria-label={`Ouvrir l’enveloppe · ${line.name}`} onClick={() => setOpen(true)}>
       <span className="section-head">
