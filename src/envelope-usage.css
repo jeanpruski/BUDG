@@ -19,6 +19,7 @@
   margin-right: 4px; border-radius: 2px; background: var(--usage-paid); vertical-align: 1px;
 }
 .envelope-usage-planned-label::before { background: var(--usage-planned); }
+.envelope-card-trigger .envelope-usage > span:last-child { font-weight: 700; }
 .envelope-usage-warning { display: block; margin-top: 4px; font-size: 10px; color: #8b3e24; }
 .envelope-scheduled .envelope-usage-block { --usage-rest: #e0e8f1; }
 .envelope-popup-hero .envelope-usage-block {
