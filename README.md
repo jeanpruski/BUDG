@@ -57,6 +57,8 @@ La **Vue d’ensemble** présente le **Solde réel du compte commun**, incluant 
 
 ### Paiements à venir
 
+Les cartes et leurs fiches utilisent la même barre : vert pour les sommes déjà payées, bleu hachuré pour les paiements prévus du mois, fond clair pour le budget restant. Les prévisions du mois prochain en sont exclues. Un dépassement prévu est indiqué séparément, sans étirer la barre au-delà de 100 %.
+
 Dans **Saisir un paiement** ou **Une dépense**, une date future crée un **paiement prévu**, pour le mois courant ou le mois prochain. Il apparaît dans la fiche de l’enveloppe, avec son montant et sa date. Le disponible réel, les dépenses payées et le solde bancaire restent inchangés ; la fiche indique aussi ce qui resterait après les paiements prévus du mois. Les débits du mois prochain apparaissent dans sa prévision et sont conservés lors de son ouverture.
 
 La Vue d’ensemble affiche sous le solde réel un montant plus petit **Après paiements prévus ce mois**, également sous le solde hors avances. Il soustrait seulement les prévisions du mois ouvert, sans déduire celles du mois prochain ni compter un débit deux fois.
@@ -90,7 +92,7 @@ Exemple avec des salaires de 3 000 € et 2 000 € : appartement prévu 1 000 �
 ## Trois types d’enveloppes
 
 - **Facture** : après saisie des paiements et financement complet, **Clôturer la facture** verse immédiatement le surplus dans le pot commun, même avant la fin du mois. Les paiements et la provision de cette facture sont alors figés pour le mois courant ; les montants futurs restent programmables. La confirmation seule ne crée pas de dépense. **Rouvrir la facture** reprend son surplus depuis le pot pour permettre une correction, si les fonds sont disponibles.
-- **Dépenses courantes** : plusieurs achats possibles ; le solde non dépensé rejoint le pot commun à la clôture.
+- **Dépenses courantes** : plusieurs achats possibles ; **Clôturer le budget du mois** transfère le solde réellement financé au pot commun, même avant la clôture mensuelle. La provision doit être entièrement reçue, les paiements prévus résolus et les achats terminés. Une réouverture reprend le surplus depuis le pot, s’il est encore disponible. Le solde est crédité une seule fois, même lors de la clôture du mois.
 - **Réserve** : le solde reste dans cette enveloppe et s’ajoute à la provision du mois suivant. Par exemple, 100 € reportés et une provision de 600 € demandent toujours 600 € de nouveaux versements, pour 700 € financés après réception. Un renfort de 200 € depuis le pot porte le total à 900 €. Les reports personnels et les sommes issues du pot restent distincts même si les salaires changent.
 
 À la clôture du mois, le reliquat d’un renfort reste affecté à une enveloppe Réserve ; dans une Facture ou une enveloppe courante, le solde non dépensé rejoint le pot une seule fois. Le surplus d’une facture déjà clôturée individuellement n’est pas crédité une seconde fois. Les transferts ne créent ni achat ni versement personnel.
@@ -101,7 +103,7 @@ Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêt
 
 **Terminer pour ce mois** marque une réserve comme terminée sans créer de dépense ni débiter le compte. Le solde reste dans la même enveloppe. La provision du mois doit être entièrement reçue. Une enveloppe terminée passe en vert et en fin de groupe ; le lecteur voit son statut, seuls les éditeurs peuvent terminer ou rouvrir le suivi. Un nouveau paiement réel rouvre automatiquement le suivi du mois.
 
-Pour une facture différée, ce bouton active un report conservé dans l’enveloppe au lieu de libérer son surplus au pot. Le report reste protégé jusqu’à sa consommation, sans changer le type habituel ni la programmation de la facture. Une facture retrouve son fonctionnement habituel au début du mois suivant l’épuisement de ce report. La clôture habituelle d’une facture reste une action distincte qui libère son surplus au pot.
+Le bouton de report est réservé aux enveloppes gérées en réserve ; une facture ordinaire propose uniquement sa clôture vers le pot. Les reports de factures déjà constitués dans une version précédente restent protégés dans leur enveloppe jusqu’à leur consommation. Une facture retrouve son fonctionnement habituel au début du mois suivant l’épuisement de ce report.
 
 Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V10 reprend les budgets V3 à V9 sans inventer de dépense, de report ou d’avance ; les anciens clients doivent recharger la page avant d’enregistrer.
 

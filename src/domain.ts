@@ -726,7 +726,7 @@ export function validateState(raw: unknown): AppState {
           closure.fundingShares.some((share) => share.amountCents < owned(closure.plannedShares, share.memberId)))
         throw new Error("La facture doit être entièrement financée avant sa clôture.");
       if (!closure.reopened) {
-        if (line.kind !== "FIXED" || keepsReserve(line) || !line.settled || line.plannedCents !== closure.plannedCents ||
+        if (keepsReserve(line) || !line.settled || line.plannedCents !== closure.plannedCents ||
             line.shares.some((share) => share.amountCents !== owned(closure.plannedShares, share.memberId)))
           throw new Error("La provision et les parts d’une facture clôturée sont figées. Rouvrez-la pour les modifier.");
         const transfers = b.potTransfers.filter((transfer) => transfer.lineId === line.id);

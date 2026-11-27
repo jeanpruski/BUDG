@@ -125,6 +125,6 @@ describe("suivi mensuel des réserves et reports de facture", () => {
     const all = renderToStaticMarkup(<Envelopes budget={s.budget} actions={actions} readOnly />);
     expect(all.indexOf("Autre réserve")).toBeLessThan(all.indexOf("Prêt immobilier"));
     expect(all).toContain("envelope-closed");
-    expect(renderToStaticMarkup(<EnvelopeMonthClosing budget={setup().budget} line={line(setup())} actions={actions} />)).toContain("disabled");
+    expect(renderToStaticMarkup(<EnvelopeMonthClosing budget={setup("RESERVE").budget} line={line(setup("RESERVE"))} actions={actions} />)).toContain("disabled");
   });
 });

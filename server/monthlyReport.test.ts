@@ -225,10 +225,21 @@ describe("comptes rendus mensuels par email", () => {
     expect(data.accountBalanceCents).toBe(2000);
     expect(data.operations.filter((operation) => operation.internal)).toMatchObject([{ type: "Facture clôturée", amountCents: 2000 }]);
     const report = await renderMonthlyReport(raw, "monthly");
-    expect(report.html).toContain("Surplus de factures libéré ce mois");
-    expect(report.text).toContain("Surplus de factures libéré vers le pot ce mois");
+    expect(report.html).toContain("Surplus d’enveloppes libéré ce mois");
+    expect(report.text).toContain("Surplus d’enveloppes libéré vers le pot ce mois");
     const saved = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
     expect(saved.budget.billClosures).toEqual(raw.state.budget.billClosures);
+  });
+  it("classe le surplus d’un budget courant comme un transfert interne dans le rapport restaurable", async () => {
+    const before = expense(fund(envelope(setup(), "Courses", 10000, "DAILY_LIFE", "VARIABLE")), "Courses", 8000);
+    const state = closeBill(before, "Courses"), raw = snapshot(state);
+    const data = monthlyReportData(raw);
+    expect(data.operations.filter(entry => entry.internal)).toMatchObject([{ type: "Budget clôturé", amountCents: 2000 }]);
+    expect(data.spentCents).toBe(8000);
+    expect(data.potBalanceCents).toBe(2000);
+    const report = await renderMonthlyReport(raw, "monthly");
+    const saved = validateState(JSON.parse(report.attachments.find(entry => entry.filename.startsWith("budget-"))!.content.toString()));
+    expect(saved).toEqual(raw.state);
   });
   it("ne crédite pas de nouveau les factures déjà clôturées lors de la clôture mensuelle", () => {
     const state = closeMonth(withClosedBill());

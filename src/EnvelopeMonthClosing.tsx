@@ -6,7 +6,7 @@ import "./bill-closing.css";
 export function EnvelopeMonthClosing({ budget, line, actions, readOnly = false, pendingCount = 0 }: {
   budget: Budget; line: ReturnType<typeof budgetSummary>["lines"][number]; actions: Actions; readOnly?: boolean; pendingCount?: number;
 }) {
-  if (!["RESERVE", "FIXED"].includes(line.kind) || line.billClosure) return null;
+  if (!keepsReserve(line) || line.billClosure) return null;
   const editable = !readOnly && budget.status === "ACTIVE";
   const finished = envelopeMonthFinished(line);
   if (!finished && !editable) return null;
@@ -19,7 +19,7 @@ export function EnvelopeMonthClosing({ budget, line, actions, readOnly = false, 
     </> : actions.finishEnvelopeMonth && <>
       <button type="button" className="secondary full" disabled={!envelopeFullyFunded(line) || pendingCount > 0}
         onClick={() => actions.finishEnvelopeMonth?.(line.id)} aria-label={`Terminer pour ce mois · ${line.name}`}>Terminer pour ce mois</button>
-      <p>{keepsReserve(line) ? "Le solde reste dans cette enveloppe pour les prochains mois." : "Reporter le solde dans cette enveloppe, sans paiement ni transfert au pot."}</p>
+      <p>Le solde reste dans cette enveloppe pour les prochains mois.</p>
       {pendingCount > 0 && <p>Confirmez ou annulez les paiements encore prévus pour ce mois.</p>}
       {!envelopeFullyFunded(line) && <p>La provision du mois doit être entièrement financée.</p>}
     </>}

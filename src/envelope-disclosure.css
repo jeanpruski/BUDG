@@ -10,7 +10,6 @@
 .envelope-card-trigger .envelope-amount { display: block; }
 .envelope-card-trigger .envelope-amount strong { overflow-wrap: anywhere; }
 .envelope-card-trigger .envelope-amount-caption-mobile { display: none; }
-.envelope .envelope-card-trigger > progress { margin: 12px 0 6px; }
 .envelope-usage { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .envelope-usage > span { overflow-wrap: anywhere; min-width: 0; }
 @media (max-width: 760px) {
@@ -30,7 +29,6 @@
   .envelope-card-trigger .envelope-name { line-height: 1.35; }
   .envelope-card-trigger .badge { padding: 4px 6px; }
   .envelope-card-trigger .envelope-amount strong { font-size: 24px; }
-  .envelope .envelope-card-trigger > progress { margin: 8px 0 5px; }
 }
 
 .envelope.envelope-scheduled {
@@ -42,6 +40,3 @@
   background: #dfeaf7;
   color: #4d7196;
 }
-.envelope.envelope-scheduled progress::-webkit-progress-bar { background: #e2eaf3; }
-.envelope.envelope-scheduled progress::-webkit-progress-value { background: #6689ad; }
-.envelope.envelope-scheduled progress::-moz-progress-bar { background: #6689ad; }

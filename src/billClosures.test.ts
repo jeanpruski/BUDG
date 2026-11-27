@@ -30,6 +30,27 @@ function balanced(state: AppState) {
 }
 
 describe("clôture anticipée d’une facture", () => {
+  it("libère aussi le surplus d’un budget à consommer, le reprend à la réouverture et évite tout double crédit mensuel", () => {
+    const before = spend(fund(line(setup(), "bill", 10000, "VARIABLE")));
+    let state = closeBill(before, "bill");
+    expect(accountBalance(state)).toBe(accountBalance(before));
+    expect(potSummary(state).availableCents).toBe(2000);
+    expect(info(state).available).toBe(0);
+    expect(validateState(JSON.parse(JSON.stringify(state)))).toEqual(state);
+    expect(closeBill(state, "bill")).toBe(state);
+    expect(() => removeExpense(state, state.budget.expenses[0].id)).toThrow();
+    state = reopenBill(state, "bill");
+    expect(potSummary(state).availableCents).toBe(0);
+    expect(info(state).available).toBe(2000);
+    state = closeMonth(closeBill(state, "bill"));
+    expect(state.budget.closedPotCents).toBe(0);
+    expect(potSummary(state).availableCents).toBe(2000);
+    balanced(state);
+    state = startNextMonth(state);
+    expect(info(state).opening).toBe(0);
+    expect(potSummary(state).availableCents).toBe(2000);
+  });
+
   it("libère 20 € réellement financés immédiatement et garde la provision du mois", () => {
     const before = spend(fund(line(setup())));
     const state = closeBill(before, "bill");

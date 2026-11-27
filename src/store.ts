@@ -430,7 +430,7 @@ function billDate(s: AppState) {
 export function closeBill(s: AppState, lineId: string, closedOn?: string) {
   active(s);
   const line = budgetSummary(s.budget).lines.find((entry) => entry.id === lineId);
-  if (!line || line.kind !== "FIXED") throw new Error("Seule une facture du mois en cours peut être clôturée.");
+  if (!line || line.kind === "RESERVE") throw new Error("Seule une facture ou un budget à consommer du mois en cours peut être clôturé.");
   if (line.billClosure) return s;
   if (keepsReserve(line)) throw new Error("Cette facture conserve son argent dans l’enveloppe. Utilisez Terminer pour ce mois.");
   if (line.funded < Math.max(line.capacity, line.spent) || line.available < 0 ||

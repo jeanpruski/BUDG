@@ -4,6 +4,7 @@ import { ArrowDownLeft, CalendarDays, CheckCircle2, Pencil, Plus, Trash2, X, typ
 import { Budget, ScheduledExpense, allocationLabel, euro, keepsReserve } from "./domain";
 import type { Actions } from "./screens";
 import type { EnvelopeLine } from "./EnvelopeCard";
+import { EnvelopeUsage } from "./EnvelopeUsage";
 import { EnvelopeExpenses } from "./EnvelopeExpenses";
 import { ScheduledExpenses } from "./ScheduledExpenses";
 import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
@@ -39,7 +40,7 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
     timer.current = setTimeout(close, 180);
   }
   const missing = Math.max(0, line.capacity - line.funded);
-  const currentPlans = scheduledExpenses.filter((entry) => entry.month === budget.id);
+  const currentPlans = scheduledExpenses.filter((entry) => entry.month === budget.id && entry.lineId === line.id);
   const pendingCents = currentPlans.reduce((sum, entry) => sum + entry.amountCents, 0);
   return createPortal(<dialog ref={ref} className={`envelope-popup${leaving ? " is-leaving" : ""}`}
     aria-labelledby={titleId} onCancel={(event) => { event.preventDefault(); dismiss(); }}
@@ -58,8 +59,7 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
       <section className="envelope-popup-hero" aria-label="Disponible et utilisation">
         <div className="envelope-popup-hero-top"><span>{budget.status === "CLOSED" ? "Solde de l’enveloppe à la clôture" : "Disponible dans l’enveloppe"}</span><span className="envelope-popup-status">{presentation.label}</span></div>
         <strong className={`envelope-popup-balance${line.available < 0 ? " is-negative" : ""}`}>{euro(line.available)}</strong>
-        <div className="envelope-popup-usage"><span>{euro(line.spent)} payés</span><span>sur {euro(line.capacity)} prévus</span></div>
-        <progress aria-label={`Utilisation de ${line.name}`} value={Math.min(line.spent, line.capacity || 1)} max={line.capacity || 1} />
+        <EnvelopeUsage name={line.name} spentCents={line.spent} capacityCents={line.capacity} scheduledCents={pendingCents} />
       </section>
       <div className="envelope-popup-columns">
         <div className="envelope-popup-main">

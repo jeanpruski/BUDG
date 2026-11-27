@@ -54,11 +54,6 @@ dialog.envelope-popup {
 .envelope-popup-status { padding: 6px 10px; border: 1px solid #ffffff24; border-radius: 30px; background: #ffffff12; font-size: 10px; line-height: 1.4; }
 .envelope-popup-balance { display: block; margin: 12px 0 24px; font-size: clamp(32px, 4vw, 46px); font-weight: 600; line-height: 1.15; letter-spacing: -1.7px; overflow-wrap: anywhere; }
 .envelope-popup-balance.is-negative { color: #ffd1be; }
-.envelope-popup-usage { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-bottom: 9px; color: #d9e5d5; font-size: 12px; }
-.envelope-popup-hero progress { display: block; width: 100%; height: 6px; margin: 0; border: 0; border-radius: 8px; background: #ffffff20; }
-.envelope-popup-hero progress::-webkit-progress-bar { background: #ffffff20; border-radius: 8px; }
-.envelope-popup-hero progress::-webkit-progress-value { background: #c5dba4; border-radius: 8px; }
-.envelope-popup-hero progress::-moz-progress-bar { background: #c5dba4; border-radius: 8px; }
 .envelope-popup-columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 20px; margin-top: 20px; }
 .envelope-popup-main, .envelope-popup-side { display: grid; gap: 20px; min-width: 0; }
 .envelope-popup-section { min-width: 0; padding: 21px; border: 1px solid #e1e9dc; border-radius: 17px; background: #fff; }

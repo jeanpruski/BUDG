@@ -778,4 +778,24 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     expect((await pool.query("SELECT count(*) FROM budg_email_reports")).rows[0].count).toBe("0");
   });
 
+  it("sauvegarde et audite la clôture d’un budget courant avec un seul crédit au pot", async () => {
+    let state = saveLine(budget(), { id: "daily", name: "Courses", kind: "VARIABLE", expenseGroup: "DAILY_LIFE", plannedCents: 10000 });
+    for (const member of budgetSummary(state.budget).balances) state = savePayment(state, { id: member.id, memberId: member.id, amountCents: member.remaining, date: "2026-08-01", note: "" });
+    state = saveExpense(state, { id: "paid", lineId: "daily", amountCents: 8000, date: "2026-08-02", description: "Achat réel" }, false);
+    state = await saveBudget(pool, state, 0, editor);
+    const auth = await login();
+    const response = await request("/api/budget", "PUT", { state: closeBill(state, "daily"), expectedRevision: state.revision }, auth);
+    expect(response.status).toBe(200);
+    const after = (await response.json()).state;
+    expect(accountBalance(after)).toBe(accountBalance(state));
+    expect(potSummary(after).availableCents).toBe(2000);
+    expect(after.budget.billClosures).toHaveLength(1);
+    expect((await pool.query("SELECT count(*) FROM budg_audit WHERE entity_type='billClosure' AND action='added'")).rows[0].count).toBe("1");
+    expect((await pool.query("SELECT data FROM budg_backups WHERE revision=$1", [state.revision])).rows[0].data).toEqual(state);
+    const audit = (await pool.query("SELECT * FROM budg_audit ORDER BY id")).rows;
+    expect(parseServerSnapshot({ format: "BUDG_SERVER_BACKUP", version: 1, kind: "daily", month: "2026-08", createdAt: new Date().toISOString(), timeZone: config.timeZone, state: after, audit }).state).toEqual(after);
+    expect((await (await request("/api/budget", "GET", undefined, auth)).json()).state).toEqual(after);
+    expect((await pool.query("SELECT count(*) FROM budg_email_reports")).rows[0].count).toBe("0");
+  });
+
 });

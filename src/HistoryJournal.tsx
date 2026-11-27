@@ -50,14 +50,15 @@ export function historyJournalEntries(state: AppState): HistoryJournalEntry[] {
       });
     }
     for (const closure of budget.billClosures) {
+      const isBill = budget.lines.find(line => line.id === closure.lineId)?.kind === "FIXED";
       const common = {
         month: budget.id, monthLabel: budget.label, envelopeKey: `envelope:${closure.lineId}`,
         envelopeLabel: names.get(closure.lineId) || "Ancienne enveloppe", amountCents: closure.amountCents,
       };
       entries.push({ ...common, id: `${budget.id}:bill:${closure.id}`, date: closure.date,
-        description: "Surplus de facture vers le pot commun", source: "billRelease" });
+        description: isBill ? "Surplus de facture vers le pot commun" : "Surplus de budget vers le pot commun", source: "billRelease" });
       if (closure.reopened) entries.push({ ...common, id: `${budget.id}:bill-reopen:${closure.id}`, date: closure.reopened.date,
-        description: "Réouverture de facture depuis le pot commun", source: "billReopen" });
+        description: isBill ? "Réouverture de facture depuis le pot commun" : "Réouverture de budget depuis le pot commun", source: "billReopen" });
     }
   }
   for (const expense of state.potExpenses) {

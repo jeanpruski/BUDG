@@ -1102,17 +1102,17 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       )}
       {!readOnly && (dialog?.type === "billClose" || dialog?.type === "billReopen") && (() => {
         const line = summary.lines.find((entry) => entry.id === dialog.lineId);
-        if (!line || line.kind !== "FIXED") return null;
+        if (!line || line.kind === "RESERVE") return null;
         const closure = activeBillClosure(b, line.id);
         return (
-          <Modal title={`${dialog.type === "billClose" ? "Clôturer" : "Rouvrir"} la facture · ${line.name}`} close={closeDialog}>
+          <Modal title={`${dialog.type === "billClose" ? "Clôturer" : "Rouvrir"} ${line.kind === "FIXED" ? "la facture" : "le budget du mois"} · ${line.name}`} close={closeDialog}>
             {activeDialogError}
             {dialog.type === "billClose" && !closure && <BillCloseForm line={line} busy={busy} submit={() => {
-              void submit((s) => closeBill(s, line.id), "Facture clôturée. Son surplus est disponible dans le pot commun.");
+              void submit((s) => closeBill(s, line.id), `${line.kind === "FIXED" ? "Facture clôturée" : "Budget clôturé"}. Son surplus est disponible dans le pot commun.`);
             }} />}
-            {dialog.type === "billReopen" && closure && <BillReopenForm amountCents={closure.amountCents}
+            {dialog.type === "billReopen" && closure && <BillReopenForm isBill={line.kind === "FIXED"} amountCents={closure.amountCents}
               potAvailableCents={potSummary(state).availableCents} busy={busy} submit={() => {
-                void submit((s) => reopenBill(s, line.id), "Facture rouverte. Son surplus a été repris du pot commun.");
+                void submit((s) => reopenBill(s, line.id), `${line.kind === "FIXED" ? "Facture rouverte" : "Budget rouvert"}. Son surplus a été repris du pot commun.`);
               }} />}
           </Modal>
         );
