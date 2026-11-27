@@ -52,6 +52,9 @@ describe("bilan synthétique du mois", () => {
     state = line(state, "vacances", 20000, "DAILY_LIFE", "RESERVE");
 
     expect(monthOverview(state)).toEqual({
+      scheduledCents: 0,
+      projectedAccountBalanceCents: 0,
+      projectedBalanceExcludingAdvancesCents: 0,
       spentCents: 0,
       accountBalanceCents: 0,
       reservedAdvanceCents: 0,

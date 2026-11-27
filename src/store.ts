@@ -427,7 +427,7 @@ function billDate(s: AppState) {
   if (date.slice(0, 7) !== month) throw new Error("Clôturez la facture uniquement après son règlement réel dans le mois concerné.");
   return date;
 }
-export function closeBill(s: AppState, lineId: string) {
+export function closeBill(s: AppState, lineId: string, closedOn?: string) {
   active(s);
   const line = budgetSummary(s.budget).lines.find((entry) => entry.id === lineId);
   if (!line || line.kind !== "FIXED") throw new Error("Seule une facture du mois en cours peut être clôturée.");
@@ -437,7 +437,7 @@ export function closeBill(s: AppState, lineId: string) {
       line.fundedShares.some((share) => share.amountCents < (line.shares.find((entry) => entry.memberId === share.memberId)?.amountCents ?? 0)))
     throw new Error("Financez entièrement cette facture et son éventuel dépassement avant de la clôturer.");
   const closure = {
-    id: uid(), lineId, date: billDate(s), amountCents: line.available,
+    id: uid(), lineId, date: closedOn ?? billDate(s), amountCents: line.available,
     plannedCents: line.plannedCents,
     plannedShares: line.shares.map((share) => ({ ...share })),
     fundingShares: line.fundedShares.map((share) => ({ ...share })),

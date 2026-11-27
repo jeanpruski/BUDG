@@ -16,6 +16,7 @@ import envelopeMonthMigrationSql from "./migrations/006_envelope_months.sql";
 import advanceMigrationSql from "./migrations/007_advance_payments.sql";
 import scheduledMigrationSql from "./migrations/008_scheduled_expenses.sql";
 import { runReportEmails } from "./reportDelivery";
+import { processScheduledPayments } from "./scheduledPayments";
 import { readReportEmailSettings, deliverReportMessage } from "./reportMail";
 import { renderMonthlyReport } from "./monthlyReport";
 import { monthSchema } from "../src/domain";
@@ -125,7 +126,14 @@ restore-disaster exige une base sans budget ni journal et restaure les traces or
     } else if (command === "jobs") {
       if (options.includes("--daily") && options.includes("--monthly")) throw new Error("Choisissez une seule fréquence.");
       const mode = options.includes("--monthly") ? "monthly" : options.includes("--daily") ? "daily" : "scheduled";
-      let backupFailed = false, emailFailed = false;
+      let backupFailed = false, emailFailed = false, paymentsFailed = false;
+      try {
+        const result = await processScheduledPayments(config, pool);
+        console.log(JSON.stringify({ automaticPayments: { processed: result.processed, closed: result.closed } }));
+      } catch {
+        paymentsFailed = true;
+        console.error("Un paiement prévu reste en attente ; les sauvegardes continuent et une prochaine tâche réessaiera.");
+      }
       try {
         const result = await runJobs(config, pool, { mode });
         console.log(JSON.stringify(result));
@@ -142,7 +150,7 @@ restore-disaster exige une base sans budget ni journal et restaure les traces or
         emailFailed = true;
         console.error("Les rapports email n’ont pas pu être traités ; la prochaine tâche horaire réessaiera.");
       }
-      if (backupFailed || emailFailed) throw new Error("Une tâche BUDG nécessite une vérification ; les données financières sont conservées.");
+      if (backupFailed || emailFailed || paymentsFailed) throw new Error("Une tâche BUDG nécessite une vérification ; les données financières sont conservées.");
     } else if (command === "reports") {
       const result = await runReportEmails(config, pool);
       console.log(JSON.stringify(result));

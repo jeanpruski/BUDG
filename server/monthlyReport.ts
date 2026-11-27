@@ -192,7 +192,7 @@ function createPdf(data: ReportData, png: Buffer): Promise<Buffer> {
     text("Financé = versements reçus, réserves reportées et transferts du pot. Le surplus d’une facture clôturée est déjà dans le pot, hors solde de l’enveloppe. Ces réaffectations ne sont ni des dépenses ni de nouveaux versements.", 42, 733, contentWidth, 9, colors.muted);
 
     for (let start = 0; start < data.scheduledExpenses.length; start += 15) {
-      newPage("Paiements prévus, non débités", "Ces sommes restent dans les prévisions. Elles ne sont pas comptées parmi les paiements réels.");
+      newPage("Paiements prévus, non débités", "Ces sommes restent dans les prévisions jusqu’à leur date de traitement automatique, hors paiements réels.");
       text(`Encore prévu pour ce mois : ${money(data.scheduledCents)}`, 42, 177, contentWidth, 11, colors.forest, true);
       data.scheduledExpenses.slice(start, start + 15).forEach((entry, index) => {
         const y = 205 + index * 31;
@@ -239,7 +239,7 @@ export async function renderMonthlyReport(raw: ServerSnapshot, event: ReportEven
     `${subject}\n${status}`,
     `Dépenses enregistrées : ${euro(data.spentCents)}\nMis de côté ce mois : ${euro(data.reserveProvisions.fundedCents)}\nVersements affectés au mois : ${euro(data.receivedCents)}\nSolde du compte à la fin du mois : ${euro(data.accountBalanceCents)}\nBudget prévu pour les enveloppes : ${euro(data.summary.plannedCents)}`,
     `Avances réservées aux mois suivants : ${euro(data.reservedAdvancesCents)}\nSolde hors avances : ${euro(data.accountBalanceCents - data.reservedAdvancesCents)}. Les avances sont incluses dans le solde réel, mais financent uniquement leur mois prévu ; leurs utilisations sont des transferts internes.`,
-    ...(data.scheduledCents ? [`Paiements encore prévus, non débités : ${euro(data.scheduledCents)}. Ils ne sont pas inclus dans les dépenses payées et restent à confirmer.`] : []),
+    ...(data.scheduledCents ? [`Paiements encore prévus, non débités : ${euro(data.scheduledCents)}. Ils ne sont pas inclus dans les dépenses payées et seront traités automatiquement à leur échéance.`] : []),
     "Mis de côté ce mois désigne les versements personnels reçus pour la provision prévue des réserves, même s’ils ont ensuite été utilisés. Les reports, les renforts du pot et les compléments au-delà du prévu sont exclus. Ce montant est distinct des dépenses et du solde total des réserves.",
     "Répartition des dépenses :\n" + data.categories.map((category) => `${category.label} : ${euro(category.cents)}`).join("\n"),
     "Contributions :\n" + data.summary.balances.map((member) => `${member.name} : prévu ${euro(member.expected)}, reçu ${euro(member.paid)}, reste à verser ${euro(member.remaining)}`).join("\n"),

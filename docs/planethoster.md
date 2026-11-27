@@ -118,6 +118,8 @@ node --env-file=/home/ACCOUNT/budg-private/.env.production server-dist/cli.cjs j
 
 Il suffit d’une tâche lancée **chaque heure à la minute 0**. Le programme vérifie lui-même l’heure de Paris : la sauvegarde quotidienne est produite seulement entre 00 h 00 et 00 h 59, en suivant l’heure d’été et d’hiver même si le serveur est en UTC. Les autres heures servent à reprendre les publications mensuelles en attente. Le quotidien n’est pas multiplié par ces nouvelles tentatives.
 
+Avant les sauvegardes et les emails, cette même commande enregistre les paiements prévus arrivés à échéance dans le mois ouvert, puis clôture les factures financées après leur dernier débit annoncé. Leurs surplus rejoignent le pot commun ; les réserves restent affectées à leur enveloppe. Le traitement rattrape une exécution manquée à l’heure suivante et se déclenche aussi à l’actualisation de l’app. Il utilise les mêmes transactions, sauvegardes et traces que les écritures manuelles, avec l’auteur « BUDG — automatique ». Il ne clôture ni n’ouvre un mois. Aucun nouveau Cron n’est nécessaire.
+
 Dans N0C → Crons, choisir `0 * * * *` et adapter cette commande avec les chemins absolus du Node de l’application, du fichier privé et du projet :
 
 ```sh

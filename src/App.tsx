@@ -203,15 +203,16 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     };
   }, []);
   useEffect(() => {
-    if (!readOnly) return;
+    if (!serverStorageMode || (!readOnly && dialog)) return;
     let active = true;
     let refreshing = false;
     async function refresh() {
       if (refreshing || locked.current) return;
       refreshing = true;
+      const startingState = current.current;
       try {
         const saved = await repository.load();
-        if (active) {
+        if (active && !locked.current && current.current === startingState) {
           const next = saved ?? initialState();
           current.current = next;
           setState(next);
@@ -229,7 +230,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [readOnly]);
+  }, [readOnly, dialog]);
   async function commit(
     change: (s: AppState) => AppState,
     message = "Modification enregistrée",
@@ -933,7 +934,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
                     if (data.get("scheduled") === "true") return saveScheduledExpense(s, expense);
                     return dialog.scheduled ? confirmScheduledExpense(s, dialog.scheduled.id, expense, data.get("settled") === "on") : saveExpense(s, expense, data.get("settled") === "on");
                   },
-                  data.get("scheduled") === "true" ? dialog.expense ? "Paiement remis dans les prévisions et soldes recalculés." : "Paiement prévu enregistré, sans débit du compte." : "Dépense enregistrée et déduite de l’enveloppe.",
+                  data.get("scheduled") === "true" ? dialog.expense ? "Paiement remis dans les prévisions et soldes recalculés." : String(data.get("date")) <= today() ? "Paiement enregistré et traitement automatique actualisé." : "Paiement prévu enregistré, sans débit immédiat du compte." : "Dépense enregistrée et déduite de l’enveloppe.",
                 );
               })
             }

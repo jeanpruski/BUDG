@@ -34,7 +34,12 @@ export function monthOverview(state: AppState) {
     return total + Math.min(provision.fundedCents,
       Math.max(0, line.opening - line.openingPotCents + provision.fundedCents - line.spent));
   }, 0);
+  const scheduledCents = state.scheduledExpenses.filter((entry) => entry.month === state.budget.id)
+    .reduce((sum, entry) => sum + entry.amountCents, 0);
   return {
+    scheduledCents,
+    projectedAccountBalanceCents: accountBalance(state) - scheduledCents,
+    projectedBalanceExcludingAdvancesCents: accountBalance(state) - reservedAdvanceCents(state) - scheduledCents,
     spentCents: categories.reduce((total, category) => total + category.cents, 0),
     accountBalanceCents: accountBalance(state),
     reservedAdvanceCents: reservedAdvanceCents(state),

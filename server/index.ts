@@ -7,6 +7,7 @@ import { readConfig, databaseConfig, type ServerConfig } from "./config";
 import { secretToken, tokenHash, sameToken, verifyPassword } from "./security";
 import { ApiError, saveBudget, type PublicUser } from "./storage";
 import { flushMonthlyArchives } from "./jobs";
+import { processScheduledPayments } from "./scheduledPayments";
 import { runReportEmails } from "./reportDelivery";
 
 type Session = { user: PublicUser; csrfToken: string; sessionHash: string };
@@ -136,16 +137,20 @@ export function createApp(config: ServerConfig, pool: Pool) {
     res.status(204).end();
   }));
   app.get("/api/budget", requireLogin, route(async (_req, res) => {
+    try { await processScheduledPayments(config, pool); }
+    catch { console.error("BUDG: un paiement prévu reste en attente de traitement automatique."); }
     const result = await pool.query("SELECT data FROM budg_state WHERE id=1");
     res.json({ state: result.rows[0] ? validateState(result.rows[0].data) : null });
   }));
   app.put("/api/budget", requireLogin, requireEditor, originGuard(config), requireCsrf, requireJson, route(async (req, res) => {
     if (req.body?.intent !== undefined && req.body.intent !== "restore")
       throw new ApiError(422, "Intention de sauvegarde invalide.");
-    const state = await saveBudget(pool, req.body?.state, req.body?.expectedRevision, req.auth!.user, {
+    let state = await saveBudget(pool, req.body?.state, req.body?.expectedRevision, req.auth!.user, {
       timeZone: config.timeZone, allowHistoryRewrite: req.body?.intent === "restore",
     });
     const warnings: string[] = [];
+    try { state = (await processScheduledPayments(config, pool)).state ?? state; }
+    catch { console.error("BUDG: un paiement prévu reste en attente de traitement automatique."); }
     // Financial data is committed. A disk problem must never turn this successful save into an error.
     try {
       const result = await flushMonthlyArchives(config, pool);

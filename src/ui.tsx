@@ -130,12 +130,14 @@ export function Metric({
   label,
   value,
   detail,
+  projection,
   tone = "",
   icon: Icon = CircleDollarSign,
 }: {
   label: string;
   value: string;
   detail?: string;
+  projection?: { label: string; value: string; negative?: boolean };
   tone?: string;
   icon?: LucideIcon;
 }) {
@@ -150,6 +152,7 @@ export function Metric({
       <strong key={value} className="metric-value">
         {value}
       </strong>
+      {projection && <div className={`metric-projection${projection.negative ? " is-negative" : ""}`}><span>{projection.label}</span><b>{projection.value}</b></div>}
       {detail && <small>{detail}</small>}
     </div>
   );

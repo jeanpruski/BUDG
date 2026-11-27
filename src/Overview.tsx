@@ -124,12 +124,14 @@ export function Dashboard({ state }: { state: AppState }) {
         <Metric
           icon={Wallet}
           label="Solde réel du compte commun"
+          projection={overview.scheduledCents > 0 ? { label: "Après paiements prévus ce mois", value: euro(overview.projectedAccountBalanceCents), negative: overview.projectedAccountBalanceCents < 0 } : undefined}
           detail={`Dont ${euro(overview.reservedAdvanceCents)} réservés pour le mois prochain`}
           value={euro(overview.accountBalanceCents)}
           tone={overview.accountBalanceCents < 0 ? "amber" : "green"}
         />
         <Metric icon={Wallet} label="Solde hors avances"
           value={euro(overview.balanceExcludingAdvancesCents)}
+          projection={overview.scheduledCents > 0 ? { label: "Après paiements prévus ce mois", value: euro(overview.projectedBalanceExcludingAdvancesCents), negative: overview.projectedBalanceExcludingAdvancesCents < 0 } : undefined}
           detail="Inclut les enveloppes et réserves du mois courant"
           tone={overview.balanceExcludingAdvancesCents < 0 ? "amber" : "green"}
         />

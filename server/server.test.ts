@@ -13,6 +13,7 @@ import { hashPassword, verifyPassword } from "./security";
 import { captureMonthlyArchives, saveBudget, type PublicUser } from "./storage";
 import { flushMonthlyArchives, parseServerSnapshot, restoreDisasterSnapshot } from "./jobs";
 import { saveScheduledExpense, confirmScheduledExpense, saveAdvancePayment, useAdvance, finishEnvelopeMonth, reopenEnvelopeMonth, closeBill, closeMonth, configureHousehold, initialState, removePotTransfer, reopenBill, resetEverything, saveExpense, saveLine, saveLineAmount, savePayment, savePotTransfer, startNextMonth } from "../src/store";
+import { processScheduledPayments } from "./scheduledPayments";
 import { accountBalance, amountForMonth, budgetSummary, potSummary } from "../src/domain";
 import { startTrackingAtMonth } from "../src/budgetStart";
 
@@ -707,6 +708,74 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("API et transactions PostgreSQL 
     const viewerSession = await login(viewer);
     expect((await request("/api/budget", "PUT", { state, expectedRevision: state.revision }, viewerSession)).status).toBe(403);
     await expect(saveBudget(pool, { ...state, version: 9, scheduledExpenses: undefined }, state.revision, editor)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("traite deux workers concurrents une seule fois et conserve une sauvegarde restaurable", async () => {
+    let state = saveScheduledExpense(withBills(), { id: "bill-paid", lineId: "bill", amountCents: 8500, date: "2026-08-29", description: "Annoncé" });
+    state = await saveBudget(pool, state, 0, editor);
+    const before = await processScheduledPayments(config, pool, { now: new Date("2026-08-28T21:59:59Z") });
+    expect(before.processed).toBe(0);
+    expect(before.state?.revision).toBe(state.revision);
+    const results = await Promise.all([1, 2].map(() => processScheduledPayments(config, pool, { now: new Date("2026-08-28T22:00:00Z") })));
+    expect(results.reduce((n, r) => n + r.processed, 0)).toBe(1);
+    expect(results.reduce((n, r) => n + r.closed, 0)).toBe(1);
+    const after = (await pool.query("SELECT data FROM budg_state")).rows[0].data;
+    expect(after.revision).toBe(state.revision + 1);
+    expect(after.budget.expenses).toHaveLength(1);
+    expect(after.budget.billClosures).toHaveLength(1);
+    expect(accountBalance(after)).toBe(1500);
+    expect(potSummary(after).availableCents).toBe(1500);
+    const audit = (await pool.query("SELECT * FROM budg_audit ORDER BY id")).rows;
+    expect(audit.filter(row => row.actor_display_name === "BUDG — automatique").map(row => row.entity_type).sort()).toEqual(["billClosure", "expense", "scheduledExpense"]);
+    const snapshot = parseServerSnapshot({ format: "BUDG_SERVER_BACKUP", version: 1, kind: "daily", month: "2026-08", createdAt: new Date().toISOString(), timeZone: config.timeZone, state: after, audit });
+    await pool.query("TRUNCATE budg_state,budg_audit,budg_backups,budg_monthly_archives,budg_email_reports RESTART IDENTITY");
+    await restoreDisasterSnapshot(pool, snapshot);
+    expect((await processScheduledPayments(config, pool)).state).toEqual(after);
+    const reopened = await saveBudget(pool, reopenBill(after, "bill"), after.revision, editor);
+    expect((await processScheduledPayments(config, pool)).state).toEqual(reopened);
+  });
+
+  it("clôture après un complément ultérieur sans rejouer le débit", async () => {
+    let state = saveLine(budget(), { id: "bill", name: "Électricité", kind: "FIXED", expenseGroup: "HOUSING", plannedCents: 10000 });
+    state = await saveBudget(pool, saveScheduledExpense(state, { id: "pending", lineId: "bill", amountCents: 8500, date: "2026-08-29", description: "Annoncé" }), 0, editor);
+    state = (await processScheduledPayments(config, pool)).state!;
+    expect(state.budget.expenses).toHaveLength(1);
+    expect(state.budget.billClosures).toEqual([]);
+    for (const member of budgetSummary(state.budget).balances) state = savePayment(state, { id: member.id, memberId: member.id, amountCents: member.remaining, date: "2026-08-30", note: "Complément" });
+    state = await saveBudget(pool, state, state.revision, editor);
+    const result = await processScheduledPayments(config, pool);
+    expect(result.processed).toBe(0);
+    expect(result.closed).toBe(1);
+    expect(result.state?.budget.expenses).toHaveLength(1);
+    expect(result.state?.budget.billClosures[0].date).toBe("2026-08-31");
+    expect(potSummary(result.state!).availableCents).toBe(1500);
+  });
+
+  it("actualise les échéances à la lecture sans autoriser les écritures du compte lecteur", async () => {
+    const planned = saveScheduledExpense(withBills(), { id: "bill-paid", lineId: "bill", amountCents: 8500, date: "2026-08-29", description: "Annoncé" });
+    const saved = await saveBudget(pool, planned, 0, editor);
+    const auth = await login(viewer);
+    const response = await request("/api/budget", "GET", undefined, auth);
+    expect(response.status).toBe(200);
+    const { state } = await response.json();
+    expect(state.revision).toBe(saved.revision + 1);
+    expect(state.scheduledExpenses).toEqual([]);
+    expect(state.budget.billClosures).toHaveLength(1);
+    expect((await (await request("/api/budget", "GET", undefined, auth)).json()).state).toEqual(state);
+    expect((await request("/api/budget", "PUT", { state, expectedRevision: state.revision }, auth)).status).toBe(403);
+  });
+
+  it("renvoie immédiatement le résultat automatique après une écriture utilisateur", async () => {
+    const auth = await login();
+    const state = saveScheduledExpense(withBills(), { id: "bill-paid", lineId: "bill", amountCents: 8500, date: "2026-08-29", description: "Annoncé" });
+    const response = await request("/api/budget", "PUT", { state, expectedRevision: 0 }, auth);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.state.revision).toBe(2);
+    expect(body.state.budget.billClosures).toHaveLength(1);
+    expect(body.state.scheduledExpenses).toEqual([]);
+    expect(accountBalance(body.state)).toBe(1500);
+    expect((await pool.query("SELECT count(*) FROM budg_email_reports")).rows[0].count).toBe("0");
   });
 
 });
