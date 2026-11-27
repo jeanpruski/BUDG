@@ -37,7 +37,7 @@ export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvai
       <span className="envelope-amount"><strong className={line.available < 0 ? "text-red" : undefined}>{euro(line.available)}</strong>
         <span className="envelope-amount-caption">{budget.status === "CLOSED" ? "solde de l’enveloppe à la clôture" : "financés, encore disponibles"}</span>
         <span className="envelope-amount-caption-mobile">{budget.status === "CLOSED" ? "À la clôture" : "Disponible"}</span></span>
-      <EnvelopeUsage name={line.name} spentCents={line.spent} capacityCents={line.capacity} scheduledCents={pendingCents} />
+      <EnvelopeUsage name={line.name} spentCents={line.spent} capacityCents={line.capacity} scheduledCents={pendingCents} showLabels={false} />
     </button>
     {open && <EnvelopePopup budget={budget} line={line} actions={actions} readOnly={readOnly} compact={compact}
       potAvailableCents={potAvailableCents} scheduledExpenses={scheduledExpenses} close={() => setOpen(false)} presentation={{ label, tone, Icon }} />}
