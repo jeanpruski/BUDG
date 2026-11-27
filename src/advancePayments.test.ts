@@ -113,7 +113,7 @@ describe("versements anticipés et prévision", () => {
     expect(nextMonthForecast(s).members[1].availableCents).toBe(30000);
     const legacy = { ...setup(), version: 8, advancePayments: undefined, advanceUses: undefined };
     const migrated = validateState(legacy);
-    expect(migrated.version).toBe(9);
+    expect(migrated.version).toBe(10);
     expect(migrated.advancePayments).toEqual([]);
     expect(migrated.budget).toEqual(legacy.budget);
   });

@@ -219,7 +219,7 @@ describe("migration et conservation des anciens budgets", () => {
       for (const line of budget.lines) delete line.openingPotCents;
     }
     const migrated = validateState(raw);
-    expect(migrated.version).toBe(9); expect(migrated.budget.potTransfers).toEqual([]);
+    expect(migrated.version).toBe(10); expect(migrated.budget.potTransfers).toEqual([]);
     expect(migrated.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(accountBalance(migrated)).toBe(accountBalance(current));
     expect(potSummary(migrated).availableCents).toBe(potSummary(current).availableCents);

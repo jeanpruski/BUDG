@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { budgetSummary, euro, validateState, type AppState } from "../src/domain";
-import { saveAdvancePayment, useAdvance, closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
+import { saveScheduledExpense, saveAdvancePayment, useAdvance, closeBill, closeMonth, configureHousehold, initialState, reopenBill, saveExpense, saveLine, savePayment, savePotExpense, savePotTransfer, setSettled, startNextMonth } from "../src/store";
 import { parseServerSnapshot, type ServerSnapshot } from "./jobs";
 import { monthlyReportData, renderMonthlyReport } from "./monthlyReport";
 
@@ -207,7 +207,7 @@ describe("comptes rendus mensuels par email", () => {
     const before = JSON.stringify(legacy);
     const report = await renderMonthlyReport(legacy, "monthly");
     const state = validateState(JSON.parse(report.attachments.find((attachment) => attachment.filename.startsWith("budget-"))!.content.toString()));
-    expect(state.version).toBe(9);
+    expect(state.version).toBe(10);
     expect(state.budget.potTransfers).toEqual([]);
     expect(state.budget.lines.every((line) => line.openingPotCents === 0)).toBe(true);
     expect(monthlyReportData(legacy).potBalanceCents).toBe(47655);
@@ -334,6 +334,20 @@ describe("comptes rendus mensuels par email", () => {
     expect(following.receivedCents).toBe(45000);
     expect(following.reservedAdvancesCents).toBe(0);
     expect(following.operations.filter(entry => entry.type === "Avance affectée au mois")).toHaveLength(1);
+  });
+
+  it("garde les débits annoncés dans les prévisions et dans la sauvegarde, hors dépenses réelles", async () => {
+    const state = saveScheduledExpense(fund(envelope(setup(), "Électricité", 10000, "HOUSING", "FIXED")), { id: "pending", lineId: "Électricité", amountCents: 9000, date: "2026-08-29", description: "Annoncé" });
+    const data = monthlyReportData(snapshot(state));
+    expect(data.spentCents).toBe(0);
+    expect(data.accountBalanceCents).toBe(10000);
+    expect(data.scheduledCents).toBe(9000);
+    expect(data.scheduledExpenses).toHaveLength(1);
+    const report = await renderMonthlyReport(snapshot(state), "monthly");
+    expect(report.html).toContain("Paiements prévus, non débités");
+    expect(report.text).toContain("Paiements encore prévus");
+    const saved = JSON.parse(report.attachments.find(file => file.filename === 'budget-2026-08.json')!.content.toString());
+    expect(saved.scheduledExpenses).toEqual(state.scheduledExpenses);
   });
 
 });

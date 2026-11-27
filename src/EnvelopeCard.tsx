@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sprout, ReceiptText, ShoppingBag } from "lucide-react";
-import { Budget, budgetSummary, envelopeMonthFinished, euro, keepsReserve, today } from "./domain";
+import { Budget, ScheduledExpense, budgetSummary, envelopeMonthFinished, euro, keepsReserve, today } from "./domain";
 import type { Actions } from "./screens";
 import { EnvelopePopup } from "./EnvelopePopup";
 import "./envelope-disclosure.css";
@@ -18,17 +18,19 @@ export function envelopePresentation(line: EnvelopeLine, budget: Budget) {
   const Icon = keepsReserve(line) ? Sprout : line.kind === "FIXED" ? ReceiptText : ShoppingBag;
   return { finished, label, tone, Icon };
 }
-export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvailableCents }: {
+export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvailableCents, scheduledExpenses = [] }: {
+  scheduledExpenses?: ScheduledExpense[];
   budget: Budget; line: EnvelopeLine; actions: Actions; readOnly: boolean; compact: boolean; potAvailableCents: number;
 }) {
   const [open, setOpen] = useState(false);
   const { finished, label, tone, Icon } = envelopePresentation(line, budget);
+  const pending = scheduledExpenses.some((entry) => entry.month === budget.id);
   return <article className={`panel envelope envelope-${line.kind.toLowerCase()}${finished ? " envelope-closed" : ""}`}>
     <button type="button" className="envelope-card-trigger" aria-haspopup="dialog"
       aria-label={`Ouvrir l’enveloppe · ${line.name}`} onClick={() => setOpen(true)}>
       <span className="section-head">
         <span className="envelope-title"><span className="envelope-symbol"><Icon size={19} aria-hidden="true" /></span><span className="envelope-name">{line.name}</span></span>
-        <span className={`badge ${tone}`}>{finished ? "Clôturé" : label}</span>
+        <span className={`badge ${finished ? tone : pending ? "blue" : tone}`}>{finished ? "Clôturé" : pending ? "Paiement prévu" : label}</span>
       </span>
       <span className="envelope-amount"><strong className={line.available < 0 ? "text-red" : undefined}>{euro(line.available)}</strong>
         <span className="envelope-amount-caption">{budget.status === "CLOSED" ? "solde de l’enveloppe à la clôture" : "financés, encore disponibles"}</span>
@@ -37,6 +39,6 @@ export function EnvelopeCard({ budget, line, actions, readOnly, compact, potAvai
       <span className="envelope-usage"><span>{euro(line.spent)} payés</span><span>Budget {euro(line.capacity)}</span></span>
     </button>
     {open && <EnvelopePopup budget={budget} line={line} actions={actions} readOnly={readOnly} compact={compact}
-      potAvailableCents={potAvailableCents} close={() => setOpen(false)} presentation={{ label, tone, Icon }} />}
+      potAvailableCents={potAvailableCents} scheduledExpenses={scheduledExpenses} close={() => setOpen(false)} presentation={{ label, tone, Icon }} />}
   </article>;
 }

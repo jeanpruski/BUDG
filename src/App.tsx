@@ -41,6 +41,7 @@ import {
   AmountScope,
   BudgetLine,
   Expense,
+  ScheduledExpense,
   Payment,
   PotExpense,
   potSummary,
@@ -70,6 +71,9 @@ import {
   resetState,
   resetEverything,
   saveExpense,
+  saveScheduledExpense,
+  removeScheduledExpense,
+  confirmScheduledExpense,
   saveLine,
   saveLineAmount,
   removeLineAmount,
@@ -106,7 +110,7 @@ type Dialog =
   | { type: "line"; line?: BudgetLine; template?: BudgetLine }
   | { type: "lineAmount"; lineId: string }
   | { type: "trackingStart" }
-  | { type: "expense"; lineId?: string; expense?: Expense }
+  | { type: "expense"; lineId?: string; expense?: Expense; scheduled?: ScheduledExpense; confirmDebit?: boolean }
   | { type: "payment"; memberId?: string; payment?: Payment; advance?: AdvancePayment; month?: string }
   | { type: "advanceUse"; advanceId: string }
   | { type: "close" }
@@ -296,6 +300,8 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
     line: (line) => open({ type: "line", line }),
     amount: (line) => open({ type: "lineAmount", lineId: line.id }),
     expense: (lineId, expense) => open({ type: "expense", lineId, expense }),
+    scheduledExpense: (scheduled, confirmDebit) => open({ type: "expense", scheduled, confirmDebit }),
+    removeScheduledExpense: (id) => confirm("Annuler ce paiement prévu ?", "Il sera retiré des prévisions. Aucun débit ni mouvement bancaire ne sera créé.", (s) => removeScheduledExpense(s, id)),
     payment: (memberId, payment) =>
       open({ type: "payment", memberId, payment }),
     removeLine: (id) =>
@@ -608,7 +614,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
               {view === "budget" && (
                 <>
                   {!desktopLayout && budgetActions}
-                  <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} />
+                  <Envelopes budget={b} actions={actions} readOnly={readOnly} potAvailableCents={potSummary(state).availableCents} scheduledExpenses={state.scheduledExpenses} />
                   <MonthClosing budget={b} actions={actions} readOnly={readOnly} />
                 </>
               )}
@@ -904,7 +910,7 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
       {!readOnly && dialog?.type === "expense" && (
         <Modal
           title={
-            dialog.expense ? "Modifier la dépense" : "Enregistrer une dépense"
+            dialog.confirmDebit ? "Confirmer le débit réel" : dialog.scheduled ? "Modifier le paiement prévu" : dialog.expense ? "Modifier la dépense" : "Enregistrer une dépense"
           }
           close={closeDialog}
         >
@@ -913,23 +919,21 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             state={state}
             lineId={dialog.lineId}
             expense={dialog.expense}
+            scheduled={dialog.scheduled}
+            confirmDebit={dialog.confirmDebit}
             busy={busy}
             submit={(data) =>
               attempt(() => {
                 void submit(
-                  (s) =>
-                    saveExpense(
-                      s,
-                      {
-                        id: dialog.expense?.id ?? uid(),
-                        lineId: String(data.get("lineId")),
-                        amountCents: parseMoney(data.get("amount")),
-                        date: String(data.get("date")),
-                        description: String(data.get("description")),
-                      },
-                      data.get("settled") === "on",
-                    ),
-                  "Dépense enregistrée et déduite de l’enveloppe.",
+                  (s) => {
+                    const expense = { id: dialog.scheduled?.id ?? dialog.expense?.id ?? uid(),
+                      lineId: String(data.get("lineId")), amountCents: parseMoney(data.get("amount")),
+                      date: String(data.get("date")), description: String(data.get("description")),
+                    };
+                    if (data.get("scheduled") === "true") return saveScheduledExpense(s, expense);
+                    return dialog.scheduled ? confirmScheduledExpense(s, dialog.scheduled.id, expense, data.get("settled") === "on") : saveExpense(s, expense, data.get("settled") === "on");
+                  },
+                  data.get("scheduled") === "true" ? dialog.expense ? "Paiement remis dans les prévisions et soldes recalculés." : "Paiement prévu enregistré, sans débit du compte." : "Dépense enregistrée et déduite de l’enveloppe.",
                 );
               })
             }
@@ -1074,8 +1078,10 @@ function BudgetApp({ user, logout }: { user?: RemoteUser; logout?: () => void })
             Elle s’ajoute au pot existant de{" "}
             {euro(potSummary(state).availableCents)}.
           </p>
+          {state.scheduledExpenses.some((entry) => entry.month === b.id) && <p className="alert warning">Des paiements sont encore prévus pour ce mois. Confirmez-les, reportez-les ou annulez-les depuis leur enveloppe avant de clôturer.</p>}
           <Form
             busy={busy}
+            canSubmit={!state.scheduledExpenses.some((entry) => entry.month === b.id)}
             button="Clôturer et conserver le surplus"
             submit={() => {
               void submit(

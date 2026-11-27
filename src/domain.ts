@@ -54,6 +54,7 @@ const expenseSchema = z.object({
   date: dateSchema,
   description: z.string().trim().max(200),
 });
+const scheduledExpenseSchema = expenseSchema.extend({ month: monthSchema, createdMonth: monthSchema });
 const advancePaymentSchema = z.object({
   id, memberId: id, amountCents: money.positive(), date: dateSchema,
   note: z.string().trim().max(200), receivedMonth: monthSchema, month: monthSchema,
@@ -118,7 +119,7 @@ const budgetSchema = z.object({
   closedAt: z.string().optional(),
 });
 export const stateSchema = z.object({
-  version: z.literal(9),
+  version: z.literal(10),
   revision: z.number().int().nonnegative(),
   potSequence: z.number().int().nonnegative().safe(),
   configured: z.boolean(),
@@ -131,6 +132,7 @@ export const stateSchema = z.object({
   potExpenses: z.array(potExpenseSchema),
   advancePayments: z.array(advancePaymentSchema).default([]),
   advanceUses: z.array(advanceUseSchema).default([]),
+  scheduledExpenses: z.array(scheduledExpenseSchema).default([]),
 });
 export type Member = z.infer<typeof memberSchema>;
 export type Share = z.infer<typeof shareSchema>;
@@ -138,6 +140,7 @@ export type BudgetLine = z.infer<typeof lineSchema>;
 export type AmountPlan = z.infer<typeof amountPlanSchema>;
 export type AmountScope = "MONTH" | "FROM_MONTH";
 export type Expense = z.infer<typeof expenseSchema>;
+export type ScheduledExpense = z.infer<typeof scheduledExpenseSchema>;
 export type PotExpense = z.infer<typeof potExpenseSchema>;
 export type PotTransfer = z.infer<typeof potTransferSchema>;
 export type BillClosure = z.infer<typeof billClosureSchema>;
@@ -569,8 +572,8 @@ function validateAdvances(state: AppState) {
 }
 
 function migrateState(raw: unknown): unknown {
-  if (raw && typeof raw === "object" && "version" in raw && [7, 8].includes(Number(raw.version)))
-    return { ...raw, version: 9 };
+  if (raw && typeof raw === "object" && "version" in raw && [7, 8, 9].includes(Number(raw.version)))
+    return { ...raw, version: 10 };
   if (raw && typeof raw === "object" && "version" in raw && raw.version === 6) {
     const legacyTransfer = potTransferSchema.omit({ order: true });
     const legacyBudget = budgetSchema.omit({ billClosures: true, closedOrder: true }).extend({ potTransfers: z.array(legacyTransfer).default([]) });
@@ -595,7 +598,7 @@ function migrateState(raw: unknown): unknown {
       }
       for (const expense of expenses.filter((entry) => entry.date.slice(0, 7) === month).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) expense.order = ++sequence;
     }
-    return { ...legacy, version: 9, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
+    return { ...legacy, version: 10, potSequence: sequence, budget: budgets[0], archivedBudgets: budgets.slice(1), potExpenses: expenses };
   }
   if (
     !raw ||
@@ -752,7 +755,7 @@ export function validateState(raw: unknown): AppState {
       b.expenses.some(
         (e) =>
           !b.lines.some((l) => l.id === e.lineId) ||
-          e.date.slice(0, 7) !== b.id,
+          (e.date.slice(0, 7) !== b.id || e.date > today()),
       ) ||
       b.potTransfers.some((transfer) =>
         transfer.date.slice(0, 7) !== b.id || transfer.date > today() ||
@@ -830,6 +833,18 @@ export function validateState(raw: unknown): AppState {
     )
       throw new Error("Une réserve reportée a disparu.");
   });
+  if (new Set(s.scheduledExpenses.map((entry) => entry.id)).size !== s.scheduledExpenses.length)
+    throw new Error("Paiements prévus dupliqués.");
+  for (const entry of s.scheduledExpenses) {
+    const target = budgets.find((budget) => budget.id === entry.month);
+    const line = (target ?? s.budget).lines.find((line) => line.id === entry.lineId);
+    if (entry.month !== s.budget.id && entry.month !== nextMonth(s.budget.id) || entry.date.slice(0, 7) !== entry.month ||
+        !budgets.some((budget) => budget.id === entry.createdMonth) || entry.createdMonth > entry.month ||
+        !line || target?.status === "CLOSED" || budgets.some((budget) => budget.expenses.some((expense) => expense.id === entry.id)))
+      throw new Error("Paiement prévu rattaché au mauvais mois ou à une enveloppe inconnue.");
+    if (target && (line.settled || line.monthFinished || target.billClosures.some((closure) => closure.lineId === line.id && !closure.reopened)))
+      throw new Error("Un paiement prévu doit être confirmé ou annulé avant de terminer cette enveloppe.");
+  }
   validateAdvances(s);
   if (new Set(s.potExpenses.map((e) => e.id)).size !== s.potExpenses.length)
     throw new Error("Dépenses du pot commun dupliquées.");

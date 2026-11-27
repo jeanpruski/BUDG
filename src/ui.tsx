@@ -21,6 +21,8 @@ export function Modal({
       dialog.close();
       const remaining = [...document.querySelectorAll<HTMLDialogElement>("dialog:modal")].at(-1);
       if (opener?.isConnected && (!remaining || remaining.contains(opener))) opener.focus({ preventScroll: true });
+      else if (remaining && !remaining.contains(document.activeElement))
+        (remaining.querySelector<HTMLElement>("button:not(:disabled)") ?? remaining).focus({ preventScroll: true });
     };
   }, []);
   return (

@@ -6,6 +6,8 @@ import {
   Member,
   BudgetLine,
   Expense,
+  ScheduledExpense,
+  amountForMonth,
   Payment,
   budgetSummary,
   euro,
@@ -168,93 +170,38 @@ export function LineForm({
 export function transactionDate(month: string) {
   return today().slice(0, 7) === month ? today() : `${month}-01`;
 }
-export function ExpenseForm({
-  state,
-  lineId,
-  expense,
-  busy,
-  submit,
-}: {
-  state: AppState;
-  lineId?: string;
-  expense?: Expense;
-  busy: boolean;
-  submit: (data: FormData) => void;
+export function ExpenseForm({ state, lineId, expense, scheduled, confirmDebit = false, busy, submit }: {
+  state: AppState; lineId?: string; expense?: Expense; scheduled?: ScheduledExpense;
+  confirmDebit?: boolean; busy: boolean; submit: (data: FormData) => void;
 }) {
-  const isClosed = (id: string) => state.budget.billClosures.some((closure) => closure.lineId === id && !closure.reopened);
-  const [selected, setSelected] = useState(
-    expense?.lineId ?? (lineId && !isClosed(lineId) ? lineId : state.budget.lines.find((entry) => !isClosed(entry.id))?.id) ?? "",
-  );
-  const line = budgetSummary(state.budget).lines.find((l) => l.id === selected);
-  return (
-    <Form busy={busy} canSubmit={!!line && !isClosed(line.id)} submit={submit}>
-      <p className="hint">
-        Saisissez uniquement une sortie réellement effectuée sur le compte
-        commun.
-      </p>
-      <label className="field">
-        Enveloppe
-        <select
-          name="lineId"
-          required
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          {state.budget.lines.map((l) => (
-            <option key={l.id} value={l.id} disabled={isClosed(l.id)}>
-              {l.name}{isClosed(l.id) ? " · facture clôturée" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      {line && (
-        <p className="form-context">
-          Disponible financé : <b>{euro(line.available)}</b> · Budget restant :{" "}
-          {euro(line.remaining)}
-        </p>
-      )}
-      <div key={selected}>
-        <Field
-          label="Montant payé (€)"
-          name="amount"
-          value={
-            expense
-              ? expense.amountCents / 100
-              : line?.kind === "FIXED"
-                ? Math.max(0, line.remaining) / 100 || ""
-                : ""
-          }
-          placeholder="Ex. 64,90"
-        />
-      </div>
-      <Field
-        label="Date de la dépense"
-        name="date"
-        type="date"
-        value={expense?.date ?? transactionDate(state.budget.id)}
-        min={`${state.budget.id}-01`}
-        max={monthEnd(state.budget.id)}
-      />
-      <Field
-        label="Description (facultative)"
-        name="description"
-        value={expense?.description}
-        placeholder="Ex. Courses du samedi"
-        required={false}
-      />
-      {line?.kind === "FIXED" && (
-        <label className="checkbox" key={`settled-${selected}`}>
-          <input
-            type="checkbox"
-            name="settled"
-            defaultChecked={expense ? line.settled : true}
-          />
-          Cette facture est entièrement réglée pour le mois.
-        </label>
-      )}
-    </Form>
-  );
+  const original = scheduled ?? expense;
+  const [date, setDate] = useState(confirmDebit ? (scheduled && scheduled.date <= today() ? scheduled.date : transactionDate(state.budget.id)) : original?.date ?? transactionDate(state.budget.id));
+  const [planned, setPlanned] = useState(!!scheduled && !confirmDebit);
+  const targetMonth = date.slice(0,7) || state.budget.id;
+  const following = targetMonth !== state.budget.id;
+  const automaticPlan = date > today() || following;
+  const scheduledMode = planned || automaticPlan;
+  const isClosed = (id: string) => !following && state.budget.billClosures.some((closure) => closure.lineId === id && !closure.reopened);
+  const [selected, setSelected] = useState(original?.lineId ?? (lineId && !isClosed(lineId) ? lineId : state.budget.lines.find((line) => !isClosed(line.id))?.id) ?? "");
+  const line = budgetSummary(state.budget).lines.find((line) => line.id === selected);
+  const otherPlans = state.scheduledExpenses.filter((entry) => entry.lineId === selected && entry.month === targetMonth && entry.id !== scheduled?.id);
+  const pendingCents = otherPlans.reduce((sum, entry) => sum + entry.amountCents, 0);
+  const plannedCents = line ? (following ? amountForMonth(line, nextMonth(state.budget.id)) : line.remaining) : 0;
+  return <Form busy={busy} canSubmit={!!line && !isClosed(line.id)} submit={submit}>
+    <p className="hint">Saisissez un débit déjà passé ou un paiement annoncé par votre banque. Une date future crée un paiement prévu, sans modifier les dépenses payées ni le solde réel.</p>
+    <label className="field">Date du paiement<input name="date" type="date" value={date} required min={`${state.budget.id}-01`} max={monthEnd(nextMonth(state.budget.id))} onChange={(event) => setDate(event.target.value)} /></label>
+    <label className="checkbox"><input type="checkbox" checked={scheduledMode} disabled={automaticPlan} onChange={(event) => setPlanned(event.target.checked)} />Paiement prévu, pas encore débité</label>
+    <input type="hidden" name="scheduled" value={String(scheduledMode)} />
+    {scheduledMode && <p className="expense-scheduled-hint">Ce paiement restera dans les prévisions jusqu’à la confirmation du débit réel.{following ? " Il sera conservé à l’ouverture du mois prochain." : " La facture ne sera pas considérée comme réglée."}</p>}
+    <label className="field">Enveloppe<select name="lineId" required value={selected} onChange={(event) => setSelected(event.target.value)}>{state.budget.lines.map((entry) => <option key={entry.id} value={entry.id} disabled={isClosed(entry.id)}>{entry.name}{isClosed(entry.id) ? " · facture clôturée" : ""}</option>)}</select></label>
+    {line && <p className="form-context">{following ? <>Provision prévue pour le mois prochain : <b>{euro(plannedCents)}</b></> : <>Disponible financé : <b>{euro(line.available)}</b> · Budget restant : {euro(line.remaining)}</>}{pendingCents > 0 && <> · Autres paiements prévus : {euro(pendingCents)}</>}</p>}
+    <div key={`${selected}:${following}`}><Field label={scheduledMode ? "Montant prévu (€)" : "Montant payé (€)"} name="amount" value={original ? original.amountCents/100 : line?.kind === "FIXED" ? Math.max(0,plannedCents-pendingCents)/100 || "" : ""} placeholder="Ex. 64,90" /></div>
+    <Field label="Description (facultative)" name="description" value={original?.description} placeholder={scheduledMode ? "Ex. Prélèvement annoncé" : "Ex. Courses du samedi"} required={false} />
+    {line?.kind === "FIXED" && !scheduledMode && <label className="checkbox" key={`settled-${selected}`}><input type="checkbox" name="settled" defaultChecked={otherPlans.length === 0 && (expense ? line.settled : true)} disabled={otherPlans.length > 0} />Cette facture est entièrement réglée pour le mois.</label>}
+    {!scheduledMode && otherPlans.length > 0 && <p className="hint">D’autres paiements restent prévus pour cette facture. Elle pourra être terminée une fois ces paiements confirmés ou annulés.</p>}
+  </Form>;
 }
+
 function monthEnd(month: string) {
   const [year, m] = month.split("-").map(Number);
   return `${month}-${new Date(year, m, 0).getDate()}`;

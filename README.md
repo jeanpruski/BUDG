@@ -55,6 +55,12 @@ Exemple : 500 € reçus pour décembre, dont 50 € utilisés en novembre, donn
 
 La **Vue d’ensemble** présente le **Solde réel du compte commun**, incluant les avances, leur montant réservé et le **Solde hors avances**. Ce dernier comprend encore les enveloppes et les réserves du mois courant : ce n’est pas de l’argent entièrement libre. Les archives, l’audit et les rapports conservent les avances et leurs utilisations. Une fois le mois d’origine clôturé, leurs traces sont verrouillées ; les versements repris dans le mois suivant sont identifiés et ne peuvent pas être supprimés comme de nouveaux virements.
 
+### Paiements à venir
+
+Dans **Saisir un paiement** ou **Une dépense**, une date future crée un **paiement prévu**, pour le mois courant ou le mois prochain. Il apparaît dans la fiche de l’enveloppe, avec son montant et sa date. Le disponible réel, les dépenses payées et le solde bancaire restent inchangés ; la fiche indique aussi ce qui resterait après les paiements prévus du mois. Les débits du mois prochain apparaissent dans sa prévision et sont conservés lors de son ouverture.
+
+Une fois le débit réellement passé, **Confirmer le débit** permet de vérifier la date et le montant effectifs. Le paiement prévu devient une dépense réelle une seule fois. Les paiements prévus peuvent être corrigés, reportés ou annulés. Une échéance dépassée reste à confirmer : aucune dépense n’est inventée automatiquement. Les paiements encore prévus du mois doivent être résolus avant sa clôture et avant de terminer leur enveloppe. L’audit, les sauvegardes et les comptes rendus conservent ces prévisions séparément des paiements réels.
+
 Le solde est calculé à partir des opérations saisies. BUDG ne se connecte pas à votre banque et n’effectue aucun virement. Le premier mois commence avec un solde à zéro : les sommes déjà versées pour ce mois doivent être enregistrées comme versements.
 
 ## Répartition, reste personnel et pot commun
@@ -91,7 +97,7 @@ Une réserve reportée ne peut pas être supprimée ou transformée. Pour arrêt
 
 Pour une facture différée, ce bouton active un report conservé dans l’enveloppe au lieu de libérer son surplus au pot. Le report reste protégé jusqu’à sa consommation, sans changer le type habituel ni la programmation de la facture. Une facture retrouve son fonctionnement habituel au début du mois suivant l’épuisement de ce report. La clôture habituelle d’une facture reste une action distincte qui libère son surplus au pot.
 
-Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V9 reprend les budgets V3 à V8 sans inventer de dépense, de report ou d’avance ; les anciens clients doivent recharger la page avant d’enregistrer.
+Exemple : 200 € provisionnés en novembre et aucun paiement donnent 200 € reportés. Décembre demande bien 1 000 € de nouveaux versements si sa provision prévue est 1 000 €, pour 1 200 € disponibles. Un paiement réel de 1 000 € laisse 200 € dans l’enveloppe. Les reports personnels et issus du pot gardent leur provenance, et les sauvegardes, rapports et archives conservent ce statut. Le format V10 reprend les budgets V3 à V9 sans inventer de dépense, de report ou d’avance ; les anciens clients doivent recharger la page avant d’enregistrer.
 
 ## Clôture et historique
 

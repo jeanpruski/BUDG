@@ -9,12 +9,13 @@ export const activeBillClosure = (budget: Budget, lineId: string) =>
   budget.billClosures.find((closure) => closure.lineId === lineId && !closure.reopened);
 const missingBillFunding = (line: LineSummary) => Math.max(0, Math.max(line.capacity, line.spent) - line.funded);
 
-export function BillClosing({ budget, line, actions, readOnly = false, potAvailableCents }: {
+export function BillClosing({ budget, line, actions, readOnly = false, potAvailableCents, pendingCount = 0 }: {
   budget: Budget;
   line: LineSummary;
   actions: Actions;
   readOnly?: boolean;
   potAvailableCents: number;
+  pendingCount?: number;
 }) {
   if (line.kind !== "FIXED" || keepsReserve(line)) return null;
   const closure = activeBillClosure(budget, line.id);
@@ -36,10 +37,11 @@ export function BillClosing({ budget, line, actions, readOnly = false, potAvaila
         </>
       ) : actions.closeBill && (
         <>
-          <button type="button" className="secondary full" disabled={missing > 0}
+          <button type="button" className="secondary full" disabled={missing > 0 || pendingCount > 0}
             onClick={() => actions.closeBill?.(line.id)} aria-label={`Clôturer la facture · ${line.name}`}>
             <LockKeyhole size={15} aria-hidden="true" /> Clôturer la facture
           </button>
+          {pendingCount > 0 && <p>Confirmez ou annulez les paiements encore prévus avant de clôturer cette facture.</p>}
           {missing > 0 && <p>Encore {euro(missing)} à financer avant de clôturer cette facture.</p>}
         </>
       )}

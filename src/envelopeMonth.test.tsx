@@ -108,7 +108,7 @@ describe("suivi mensuel des réserves et reports de facture", () => {
     const before = fund(setup());
     const legacy = { ...before, version: 7 };
     const migrated = validateState(legacy);
-    expect(migrated.version).toBe(9);
+    expect(migrated.version).toBe(10);
     expect(migrated.budget).toEqual(before.budget);
     expect(() => validateState({ ...before, budget: { ...before.budget, lines: before.budget.lines.map(l => ({ ...l, kind: "VARIABLE", carryRemainder: true })) } })).toThrow(/report ponctuel/);
     const closed = closeMonth(finishEnvelopeMonth(before, "loan"));

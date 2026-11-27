@@ -3,6 +3,7 @@ import { AdvancePayment, AppState, advanceSummary, euro, monthLabel } from "./do
 import { nextMonthForecast } from "./futureBudget";
 import { displayDate } from "./ui";
 import "./future-budget.css";
+import "./scheduled-expenses.css";
 
 export function FutureBudgetPanel({ state, readOnly = false, add, edit, use, remove, returnUse }: {
   state: AppState; readOnly?: boolean; add: () => void; edit: (payment: AdvancePayment) => void;
@@ -43,6 +44,7 @@ export function FutureBudgetPanel({ state, readOnly = false, add, edit, use, rem
     <div className="future-budget-totals"><div><span>Budget prévu</span><strong>{euro(forecast.plannedCents)}</strong></div><div><span>À payer ou consommer</span><strong>{euro(forecast.plannedPaymentsCents)}</strong></div><div><span>À garder en réserve</span><strong>{euro(forecast.plannedReservesCents)}</strong></div></div>
     <p className="future-budget-note">Les réserves accumulées restent à part : elles ne réduisent pas la nouvelle provision. Les paiements réels pourront différer de cette prévision.</p>
     <details className="future-budget-lines"><summary>Montants prévus par enveloppe</summary><dl>{forecast.lines.map((line) => <div key={line.id}><dt>{line.name}{line.kind === "RESERVE" && <small>Réserve</small>}</dt><dd>{euro(line.plannedCents)}</dd></div>)}</dl></details>
+    {forecast.scheduledExpenses.length > 0 && <details className="future-scheduled-payments"><summary>Paiements déjà annoncés pour ce mois · {euro(forecast.scheduledExpenses.reduce((sum, entry) => sum + entry.amountCents, 0))}</summary><p className="future-budget-note">Ces paiements ne sont pas encore débités et restent à rapprocher des provisions prévues. Ils seront conservés à l’ouverture du mois.</p><ul>{forecast.scheduledExpenses.map((entry) => <li key={entry.id}><span>{displayDate(entry.date)} · {forecast.lines.find((line) => line.id === entry.lineId)?.name}</span><strong>{euro(entry.amountCents)}</strong></li>)}</ul></details>}
     <section className="future-budget-advances" aria-labelledby="future-budget-advances-title"><div className="future-budget-advance-heading"><div><h3 id="future-budget-advances-title">Versements anticipés</h3><p><strong>{euro(forecast.advances.availableCents)}</strong> réservés pour {monthLabel(forecast.month)}</p></div>
       {editable && <button type="button" className="secondary" onClick={add}><Plus size={15} aria-hidden="true" />Versement anticipé</button>}
     </div>

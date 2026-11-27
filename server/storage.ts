@@ -8,7 +8,7 @@ export type PublicUser = { id: string; email: string; displayName: string; role:
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer" | "billClosure" | "envelopeMonth" | "advancePayment" | "advanceUse"; month: string; id: string; value: unknown };
+type AuditEntity = { type: "expense" | "payment" | "potExpense" | "potTransfer" | "billClosure" | "envelopeMonth" | "advancePayment" | "advanceUse" | "scheduledExpense"; month: string; id: string; value: unknown };
 export type MonthlyCaptureOptions = { timeZone?: string; now?: Date };
 type SaveOptions = MonthlyCaptureOptions & { allowHistoryRewrite?: boolean };
 function financialEntities(state: AppState | null): Map<string, AuditEntity> {
@@ -29,6 +29,7 @@ function financialEntities(state: AppState | null): Map<string, AuditEntity> {
     add({ type: "potExpense", month: value.date.slice(0, 7), id: value.id, value });
   for (const value of state.advancePayments) add({ type: "advancePayment", month: value.receivedMonth, id: value.id, value });
   for (const value of state.advanceUses) add({ type: "advanceUse", month: value.month, id: value.id, value });
+  for (const value of state.scheduledExpenses) add({ type: "scheduledExpense", month: value.month, id: value.id, value });
   return result;
 }
 export async function writeAudit(client: Pick<PoolClient, "query">, before: AppState | null, after: AppState, actor: PublicUser) {
@@ -68,6 +69,7 @@ export async function captureMonthlyArchives(
     const related = (state: AppState | null) => [
       state?.advancePayments.filter((payment) => payment.receivedMonth === month.id) || [],
       state?.advanceUses.filter((use) => use.month === month.id) || [],
+      state?.scheduledExpenses.filter((entry) => entry.month === month.id || entry.createdMonth === month.id) || [],
     ];
     return JSON.stringify(old) !== JSON.stringify(month) || JSON.stringify(oldPot) !== JSON.stringify(nextPot) ||
       JSON.stringify(related(before)) !== JSON.stringify(related(after));
@@ -180,7 +182,7 @@ export async function saveBudget(pool: Pool, raw: unknown, expectedRevision: num
     const row = current.rows[0];
     if (Number(row?.revision || 0) !== expectedRevision)
       throw new ApiError(409, "Le budget a changé sur un autre appareil. Rechargez-le avant de continuer.");
-    if (Number(row?.data.version) >= 8 && (raw as { version?: unknown }).version !== 9 && !options.allowHistoryRewrite)
+    if (Number(row?.data.version) >= 8 && (raw as { version?: unknown }).version !== 10 && !options.allowHistoryRewrite)
       throw new ApiError(409, "Une nouvelle version de BUDG est disponible. Rechargez la page avant de modifier le budget.");
     const before = row ? validateState(row.data) : null;
     if (before && !options.allowHistoryRewrite) checkClosedPotMovements(before, next);

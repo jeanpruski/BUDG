@@ -22,6 +22,7 @@ export function nextMonthForecast(state: AppState) {
       personalRemainderCents: member.incomeCents - advanceCents - remainingCents };
   });
   return { month, members, lines, advances,
+    scheduledExpenses: state.scheduledExpenses.filter((entry) => entry.month === month),
     preparedIncomes: state.incomeHistory.some((income) => income.effectiveFrom === month),
     plannedCents: lines.reduce((sum, line) => sum + line.plannedCents, 0),
     plannedPaymentsCents: lines.filter((line) => line.kind !== "RESERVE").reduce((sum, line) => sum + line.plannedCents, 0),

@@ -1,16 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownLeft, CalendarDays, CheckCircle2, Pencil, Plus, Trash2, X, type LucideIcon } from "lucide-react";
-import { Budget, allocationLabel, euro, keepsReserve } from "./domain";
+import { Budget, ScheduledExpense, allocationLabel, euro, keepsReserve } from "./domain";
 import type { Actions } from "./screens";
 import type { EnvelopeLine } from "./EnvelopeCard";
 import { EnvelopeExpenses } from "./EnvelopeExpenses";
+import { ScheduledExpenses } from "./ScheduledExpenses";
 import { EnvelopePotTransfers } from "./EnvelopePotTransfers";
 import { EnvelopeMonthClosing } from "./EnvelopeMonthClosing";
 import { BillClosing } from "./BillClosing";
 import "./envelope-popup.css";
 
-export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAvailableCents, close, presentation }: {
+export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAvailableCents, scheduledExpenses = [], close, presentation }: {
+  scheduledExpenses?: ScheduledExpense[];
   budget: Budget; line: EnvelopeLine; actions: Actions; readOnly: boolean; compact: boolean; potAvailableCents: number;
   close: () => void; presentation: { label: string; tone: string; Icon: LucideIcon };
 }) {
@@ -37,6 +39,8 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
     timer.current = setTimeout(close, 180);
   }
   const missing = Math.max(0, line.capacity - line.funded);
+  const currentPlans = scheduledExpenses.filter((entry) => entry.month === budget.id);
+  const pendingCents = currentPlans.reduce((sum, entry) => sum + entry.amountCents, 0);
   return createPortal(<dialog ref={ref} className={`envelope-popup${leaving ? " is-leaving" : ""}`}
     aria-labelledby={titleId} onCancel={(event) => { event.preventDefault(); dismiss(); }}
     onClick={(event) => {
@@ -66,6 +70,7 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
               <div><dt>Total financé</dt><dd>{euro(line.funded)}</dd></div>
               {keepsReserve(line) && <div><dt>Report des mois précédents</dt><dd>{euro(line.opening)}</dd></div>}
               <div><dt>Déjà payé</dt><dd>{euro(line.spent)}</dd></div>
+              {pendingCents > 0 && <><div><dt>Paiements prévus</dt><dd>{euro(pendingCents)}</dd></div><div className={line.available - pendingCents < 0 ? "is-warning" : undefined}><dt>Après paiements prévus</dt><dd>{euro(line.available - pendingCents)}</dd></div></>}
               {line.potAddedCents > 0 && <div><dt>Ajouté depuis le pot</dt><dd>{euro(line.potAddedCents)}</dd></div>}
               {missing > 0 && <div className="is-warning"><dt>Encore à financer</dt><dd>{euro(missing)}</dd></div>}
               {line.remaining < 0 && <div className="is-warning"><dt>Dépassement du budget</dt><dd>{euro(-line.remaining)}</dd></div>}
@@ -73,6 +78,7 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
             {keepsReserve(line) && <p className="envelope-popup-reserve-note"><CheckCircle2 size={17} aria-hidden="true" />Le solde reste dans cette enveloppe. La prochaine provision reste due en totalité.</p>}
           </section>
           {!compact && <section className="envelope-popup-section envelope-popup-ledger">
+            <ScheduledExpenses budget={budget} payments={scheduledExpenses} actions={actions} readOnly={readOnly} />
             <EnvelopeExpenses budget={budget} line={line} actions={actions} readOnly={readOnly} defaultOpen />
             <EnvelopePotTransfers budget={budget} line={line} actions={actions} readOnly={readOnly} defaultOpen />
           </section>}
@@ -87,8 +93,8 @@ export function EnvelopePopup({ budget, line, actions, readOnly, compact, potAva
               <button type="button" className="text-button" onClick={() => actions.line(line)}><Pencil size={15} aria-hidden="true" />Modifier</button>
               <button type="button" className="text-button danger" onClick={() => actions.removeLine(line.id)}><Trash2 size={15} aria-hidden="true" />Supprimer</button>
             </div>}
-            {!compact && <EnvelopeMonthClosing budget={budget} line={line} actions={actions} />}
-            {!compact && <BillClosing budget={budget} line={line} actions={actions} potAvailableCents={potAvailableCents} />}
+            {!compact && <EnvelopeMonthClosing budget={budget} line={line} actions={actions} pendingCount={currentPlans.length} />}
+            {!compact && <BillClosing budget={budget} line={line} actions={actions} potAvailableCents={potAvailableCents} pendingCount={currentPlans.length} />}
           </section>}
           {!editable && !compact && <section className="envelope-popup-section"><h3>Suivi de l’enveloppe</h3>
             <EnvelopeMonthClosing budget={budget} line={line} actions={actions} readOnly />

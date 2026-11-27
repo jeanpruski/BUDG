@@ -22,6 +22,7 @@ import {
   Budget,
   BudgetLine,
   Expense,
+  ScheduledExpense,
   Payment,
   PotExpense,
   PotTransfer,
@@ -35,6 +36,8 @@ import {
 import { Empty, Metric, displayDate } from "./ui";
 export type Actions = {
   expense: (lineId?: string, expense?: Expense) => void;
+  scheduledExpense?: (payment: ScheduledExpense, confirm?: boolean) => void;
+  removeScheduledExpense?: (id: string) => void;
   payment: (memberId?: string, payment?: Payment) => void;
   line: (line?: BudgetLine) => void;
   amount?: (line: BudgetLine) => void;
@@ -139,7 +142,9 @@ export function Envelopes({
   readOnly = false,
   compact = false,
   potAvailableCents = 0,
+  scheduledExpenses = [],
 }: {
+  scheduledExpenses?: ScheduledExpense[];
   budget: Budget;
   actions: Actions;
   readOnly?: boolean;
@@ -174,7 +179,7 @@ export function Envelopes({
                 Number(!!a.billClosure || envelopeMonthFinished(a)) - Number(!!b.billClosure || envelopeMonthFinished(b)) ||
                 envelopeDisplayOrder(a) - envelopeDisplayOrder(b))
               .map((line) => <EnvelopeCard key={`${budget.id}:${line.id}`} budget={budget} line={line}
-                actions={actions} readOnly={readOnly} compact={compact} potAvailableCents={potAvailableCents} />)}
+                actions={actions} readOnly={readOnly} compact={compact} potAvailableCents={potAvailableCents} scheduledExpenses={scheduledExpenses.filter((entry) => entry.lineId === line.id)} />)}
           </div>
         </section>
       ))}

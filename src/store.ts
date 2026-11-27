@@ -8,6 +8,7 @@ import {
   Budget,
   BudgetLine,
   Expense,
+  ScheduledExpense,
   Member,
   Payment,
   PotExpense,
@@ -47,7 +48,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     ["vacances", "Vacances", "DAILY_LIFE", "RESERVE"],
   ] as const;
   return {
-    version: 9,
+    version: 10,
     revision: 0,
     potSequence: 0,
     configured: false,
@@ -86,6 +87,7 @@ export function initialState(month = today().slice(0, 7)): AppState {
     potExpenses: [],
     advancePayments: [],
     advanceUses: [],
+    scheduledExpenses: [],
   };
 }
 export function membersForMonth(s: AppState, month: string): Member[] {
@@ -269,6 +271,7 @@ export function removeLine(s: AppState, id: string) {
   active(s);
   if (
     s.budget.expenses.some((e) => e.lineId === id) ||
+    s.scheduledExpenses.some((e) => e.lineId === id) ||
     s.budget.billClosures.some((closure) => closure.lineId === id) ||
     s.budget.potTransfers.some((transfer) => transfer.lineId === id) ||
     (s.budget.lines.find((line) => line.id === id)?.openingPotCents ?? 0) > 0 ||
@@ -301,7 +304,7 @@ export function saveExpense(s: AppState, expense: Expense, settled: boolean) {
       : [...s.budget.expenses, expense],
     lines: s.budget.lines.map((l) =>
       l.id === expense.lineId && l.kind === "FIXED"
-        ? { ...l, settled, monthFinished: l.monthFinished ? false : undefined }
+        ? { ...l, settled: settled && !s.scheduledExpenses.some((entry) => entry.month === s.budget.id && entry.lineId === l.id), monthFinished: l.monthFinished ? false : undefined }
         : l.id === expense.lineId && l.monthFinished ? { ...l, monthFinished: false }
         : previous &&
             previous.lineId !== expense.lineId &&
@@ -462,7 +465,36 @@ export function reopenBill(s: AppState, lineId: string) {
     } : entry),
   });
 }
+export function saveScheduledExpense(s: AppState, input: Expense) {
+  active(s);
+  const month = input.date.slice(0, 7);
+  if (month !== s.budget.id && month !== nextMonth(s.budget.id))
+    throw new Error("Choisissez une date du mois courant ou du mois prochain.");
+  const previous = s.scheduledExpenses.find((entry) => entry.id === input.id);
+  const source = s.budget.expenses.some((entry) => entry.id === input.id) ? removeExpense(s, input.id) : s;
+  if (month === source.budget.id) editableLine(source, input.lineId);
+  const entry: ScheduledExpense = { ...input, month, createdMonth: previous?.createdMonth ?? source.budget.id };
+  return validateState({ ...source,
+    scheduledExpenses: previous ? source.scheduledExpenses.map((old) => old.id === entry.id ? entry : old) : [...source.scheduledExpenses, entry],
+    budget: { ...source.budget, lines: source.budget.lines.map((line) => month === source.budget.id && line.id === input.lineId ? {
+      ...line, settled: false, monthFinished: line.monthFinished === undefined ? undefined : false,
+    } : line) },
+  });
+}
+export function removeScheduledExpense(s: AppState, id: string) {
+  active(s);
+  if (!s.scheduledExpenses.some((entry) => entry.id === id)) throw new Error("Ce paiement prévu n’existe plus.");
+  return validateState({ ...s, scheduledExpenses: s.scheduledExpenses.filter((entry) => entry.id !== id) });
+}
+export function confirmScheduledExpense(s: AppState, id: string, input: Expense, settled: boolean) {
+  active(s);
+  if (input.id !== id || !s.scheduledExpenses.some((entry) => entry.id === id)) throw new Error("Ce paiement prévu n’existe plus.");
+  return saveExpense({ ...s, scheduledExpenses: s.scheduledExpenses.filter((entry) => entry.id !== id) }, input, settled);
+}
+
 export function closeMonth(s: AppState) {
+  if (s.scheduledExpenses.some((entry) => entry.month === s.budget.id))
+    throw new Error("Confirmez, reportez ou annulez les paiements encore prévus pour ce mois avant de clôturer.");
   if (s.budget.status === "CLOSED") return s;
   return withBudget(s, closeBudget(s.budget, nextPotOrder(s)));
 }
